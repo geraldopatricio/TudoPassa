@@ -1,0 +1,17 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Inter', ui-sans-serif, system-ui;
+  --color-primary: #6366f1;
+}
+
+/* Reset padrão para tema claro */
+body {
+  @apply bg-slate-50 text-slate-900 antialiased;
+  font-family: var(--font-sans);
+}
+
+/* Garante que o fundo seja sempre claro */
+html {
+  background-color: #f8fafc;
+}
