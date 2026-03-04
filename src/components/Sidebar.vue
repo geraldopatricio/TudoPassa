@@ -1,16 +1,35 @@
 <script setup>
-import { LayoutDashboard, ShoppingCart, Package, Users } from 'lucide-vue-next'
+import { LayoutDashboard, ShoppingCart, Package, Users, X } from 'lucide-vue-next'
+
+defineProps({
+  isOpen: Boolean
+})
+
+const emit = defineEmits(['close'])
 </script>
 
 <template>
-  <aside class="w-72 bg-white border-r border-slate-200/60 flex flex-col h-screen">
-    <div class="p-8">
+  <!-- Overlay para fechar no mobile ao clicar fora -->
+  <div v-if="isOpen" 
+    @click="emit('close')" 
+    class="fixed inset-0 bg-slate-900/50 z-40 lg:hidden backdrop-blur-sm transition-opacity">
+  </div>
+
+  <aside :class="[
+    'fixed inset-y-0 left-0 z-50 w-72 bg-white border-r border-slate-200/60 flex flex-col h-screen transition-transform duration-300 lg:translate-x-0 lg:static lg:inset-0',
+    isOpen ? 'translate-x-0' : '-translate-x-full'
+  ]">
+    <div class="p-8 flex justify-between items-center">
       <div class="flex items-center gap-3 text-indigo-600">
         <div class="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-100">
           <ShoppingCart class="w-5 h-5" />
         </div>
         <span class="font-black text-xl tracking-tight text-slate-800 uppercase text-nowrap">Tudo Passa</span>
       </div>
+      <!-- Botão fechar apenas no mobile -->
+      <button @click="emit('close')" class="lg:hidden p-2 text-slate-400 hover:bg-slate-50 rounded-lg">
+        <X class="w-6 h-6" />
+      </button>
     </div>
 
     <nav class="flex-1 px-4 space-y-2">
