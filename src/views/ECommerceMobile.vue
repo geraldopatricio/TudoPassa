@@ -7,7 +7,7 @@ import {
 } from 'lucide-vue-next'
 
 // --- CONFIGURAÇÃO ---
-const API_URL = 'https://tudopassa-backend.oo2no7.easypanel.host'
+const API_URL = import.meta.env.VITE_API_URL
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN
 
 // --- ESTADOS GLOBAIS ---
