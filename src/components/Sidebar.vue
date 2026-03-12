@@ -1,5 +1,5 @@
 <script setup>
-import { LayoutDashboard, ShoppingCart, Package, Users, X } from 'lucide-vue-next'
+import { LayoutDashboard, ShoppingCart, Package, Users, Store, X } from 'lucide-vue-next'
 
 defineProps({
   isOpen: Boolean
@@ -40,6 +40,10 @@ const emit = defineEmits(['close'])
       <a href="#" class="flex items-center gap-3 px-4 py-3 bg-indigo-50 text-indigo-600 rounded-2xl shadow-sm border border-indigo-100/50">
         <ShoppingCart class="w-5 h-5" /> 
         <span class="font-bold">PDV Vendas</span>
+      </a>
+      <a href="ecommerce" class="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 rounded-2xl transition-all group">
+        <Store class="w-5 h-5" /> 
+        <span class="font-bold">E-Commerce</span>
       </a>
       <a href="#" class="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 rounded-2xl transition-all group">
         <Package class="w-5 h-5 group-hover:text-indigo-600" /> 
