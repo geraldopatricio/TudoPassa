@@ -31,22 +31,28 @@ const shippingValue = ref(0)
 const calculatingShipping = ref(false)
 const pixData = ref(null)
 
-// --- MÉTODOS ---
+// --- MÉTODOS DE DADOS ---
 const fetchProducts = async () => {
   try {
     loading.value = true
     const res = await fetch(`${API_URL}/produtos`)
     const data = await res.json()
     products.value = Array.isArray(data) ? data : []
-  } catch (e) { console.error("Erro fetch:", e) } 
-  finally { setTimeout(() => loading.value = false, 800) }
+  } catch (e) { 
+    console.error("Erro fetch:", e) 
+  } finally { 
+    setTimeout(() => loading.value = false, 800) 
+  }
 }
 
+// --- COMPUTED PROPERTIES ---
 const filteredBase = computed(() => {
   if (!searchQuery.value) return products.value
   return products.value.filter(p => p.descricao?.toLowerCase().includes(searchQuery.value.toLowerCase()))
 })
+
 const totalPages = computed(() => Math.ceil(filteredBase.value.length / itemsPerPage.value) || 1)
+
 const paginatedProducts = computed(() => {
   const start = (currentPage.value - 1) * itemsPerPage.value
   return filteredBase.value.slice(start, start + itemsPerPage.value)
@@ -55,6 +61,15 @@ const paginatedProducts = computed(() => {
 const subtotalCart = computed(() => cart.value.reduce((acc, item) => acc + item.totalPrice, 0))
 const totalFinal = computed(() => subtotalCart.value + shippingValue.value)
 
+// REGRA: Só permite modo grade se houver mais de 1 tamanho disponível
+const hasMultipleSizes = computed(() => {
+  if (!selectedProduct.value) return false
+  const grade = selectedProduct.value.variantes?.[0]?.grade || {}
+  const availableSizes = Object.keys(grade).filter(tam => grade[tam] > 0)
+  return availableSizes.length > 1
+})
+
+// --- LÓGICA DE FRETE ---
 const calculateShipping = () => {
   if (customer.value.endereco.length > 10) {
     calculatingShipping.value = true
@@ -65,39 +80,59 @@ const calculateShipping = () => {
   }
 }
 
+// --- LÓGICA DO CARRINHO ---
 const openDetails = (p) => {
   selectedProduct.value = p
   selectedSize.value = null
   selectedQty.value = 1
-  isGridMode.value = false
+  isGridMode.value = false // Inicia desativado
   currentStep.value = 'details'
   window.scrollTo(0, 0)
 }
 
 const handleAddToCart = () => {
-  if (!selectedSize.value) { alert("Por favor, selecione um tamanho!"); return; }
-
-  const item = {
-    cartId: Date.now() + Math.random(),
-    referencia: selectedProduct.value.referencia,
-    descricao: selectedProduct.value.descricao,
-    imagem: selectedProduct.value.imagem,
-    chosenSize: selectedSize.value,
-    chosenQty: selectedQty.value,
-    unitPrice: selectedProduct.value.variantes[0].valor_unitario,
-    totalPrice: selectedProduct.value.variantes[0].valor_unitario * selectedQty.value
+  // Validação: Se não for grade, precisa selecionar o tamanho
+  if (!isGridMode.value && !selectedSize.value) {
+    alert("Por favor, selecione um tamanho!")
+    return
   }
 
-  cart.value.push(item)
-  localStorage.setItem('gp_cart', JSON.stringify(cart.value))
+  const variante = selectedProduct.value.variantes[0]
+  const valorUnitario = variante.valor_unitario
 
   if (isGridMode.value) {
-    selectedSize.value = null
-    selectedQty.value = 1
-    // Pequeno feedback visual pode ser adicionado aqui
+    // NOVA REGRA: COMPRA EM GRADE (LOTE)
+    // Adiciona a quantidade selecionada para TODOS os tamanhos da grade
+    Object.keys(variante.grade).forEach(tam => {
+      const item = {
+        cartId: Date.now() + Math.random(),
+        referencia: selectedProduct.value.referencia,
+        descricao: selectedProduct.value.descricao,
+        imagem: selectedProduct.value.imagem,
+        chosenSize: tam,
+        chosenQty: selectedQty.value,
+        unitPrice: valorUnitario,
+        totalPrice: valorUnitario * selectedQty.value
+      }
+      cart.value.push(item)
+    })
   } else {
-    currentStep.value = 'cart-summary'
+    // COMPRA NORMAL: APENAS UM TAMANHO
+    const item = {
+      cartId: Date.now() + Math.random(),
+      referencia: selectedProduct.value.referencia,
+      descricao: selectedProduct.value.descricao,
+      imagem: selectedProduct.value.imagem,
+      chosenSize: selectedSize.value,
+      chosenQty: selectedQty.value,
+      unitPrice: valorUnitario,
+      totalPrice: valorUnitario * selectedQty.value
+    }
+    cart.value.push(item)
   }
+
+  localStorage.setItem('gp_cart', JSON.stringify(cart.value))
+  currentStep.value = 'cart-summary'
 }
 
 const removeFromCart = (cartId) => {
@@ -105,6 +140,7 @@ const removeFromCart = (cartId) => {
   localStorage.setItem('gp_cart', JSON.stringify(cart.value))
 }
 
+// --- LÓGICA DE PAGAMENTO E EMAIL ---
 const handlePayment = async () => {
   if (!customer.value.nome || !customer.value.email || shippingValue.value === 0) {
     alert("Preencha todos os campos e aguarde o cálculo do frete!")
@@ -112,6 +148,7 @@ const handlePayment = async () => {
   }
 
   try {
+    // 1. Gera o PIX
     const res = await fetch(`${API_URL}/produtos/checkout/pix`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -123,10 +160,12 @@ const handlePayment = async () => {
       })
     })
     const data = await res.json()
+    
     if (data.success) {
       pixData.value = data
-      // Dispara e-mail de notificação
-      fetch(`${API_URL}/produtos/notificar-pedido`, {
+
+      // 2. Dispara e-mail de notificação (Chamando a rota correta para evitar 404)
+      await fetch(`${API_URL}/produtos/notificar-pedido`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -136,25 +175,38 @@ const handlePayment = async () => {
           frete: shippingValue.value
         })
       })
+    } else {
+      alert("Erro ao processar pagamento.")
     }
-  } catch (e) { alert("Erro de conexão.") }
+  } catch (e) { 
+    console.error(e)
+    alert("Erro de conexão com o servidor.") 
+  }
 }
 
+// --- RASTREIO E MAPA ---
 const initMap = () => {
   if (!window.mapboxgl) return
   mapboxgl.accessToken = MAPBOX_TOKEN
-  const map = new mapboxgl.Map({
-    container: 'map',
-    style: 'mapbox://styles/mapbox/streets-v12',
-    center: [-38.5267, -3.7319],
-    zoom: 14
-  })
-  new mapboxgl.Marker({ color: '#4f46e5' }).setLngLat([-38.5267, -3.7319]).addTo(map)
+  
+  // Delay para garantir que o container do mapa esteja visível
+  setTimeout(() => {
+    const map = new mapboxgl.Map({
+      container: 'map',
+      style: 'mapbox://styles/mapbox/streets-v12',
+      center: [-38.5267, -3.7319], // Fortaleza
+      zoom: 14
+    })
+    new mapboxgl.Marker({ color: '#4f46e5' }).setLngLat([-38.5267, -3.7319]).addTo(map)
+    
+    map.on('load', () => {
+      map.resize()
+    })
+  }, 500)
 }
 
 const finishAndTrack = () => {
   currentStep.value = 'tracking'
-  const finalCart = [...cart.value]
   cart.value = []
   localStorage.removeItem('gp_cart')
   nextTick(() => initMap())
@@ -231,7 +283,7 @@ onMounted(fetchProducts)
     <div v-if="currentStep === 'details' && selectedProduct" class="animate-in slide-in-from-bottom-20">
       <div class="relative h-[55vh]">
         <img :src="`${API_URL}/uploads/${selectedProduct.imagem}`" @click="isZoomed = true" class="w-full h-full object-cover">
-        <div class="absolute top-4 left-4 flex gap-2">
+        <div class="absolute top-4 left-4">
             <button @click="currentStep = 'home'" class="p-3 bg-white/80 backdrop-blur rounded-full shadow-lg"><ArrowLeft/></button>
         </div>
         <button @click="isZoomed = true" class="absolute bottom-20 right-6 bg-white/90 backdrop-blur p-4 rounded-full shadow-xl"><Eye class="w-5 h-5"/></button>
@@ -242,15 +294,15 @@ onMounted(fetchProducts)
         <h2 class="text-2xl font-black text-slate-900 mb-2 leading-tight">{{ selectedProduct.descricao }}</h2>
         <p class="text-3xl font-black text-indigo-600 italic mb-8">R$ {{ selectedProduct.variantes?.[0]?.valor_unitario?.toFixed(2) }}</p>
 
-        <!-- TOGGLE MODO GRADE -->
-        <div class="flex items-center justify-between bg-indigo-50 p-5 rounded-3xl mb-8 border border-indigo-100">
+        <!-- TOGGLE MODO GRADE (LOTE) -->
+        <div v-if="hasMultipleSizes" class="flex items-center justify-between bg-indigo-50 p-5 rounded-3xl mb-8 border border-indigo-100">
             <div class="flex items-center gap-4">
-                <div class="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-indigo-200">
+                <div class="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg">
                     <Layers class="w-6 h-6" />
                 </div>
                 <div>
                     <h4 class="font-black text-xs text-indigo-900 uppercase tracking-tight">Comprar em Grade</h4>
-                    <p class="text-[9px] text-indigo-500 font-bold uppercase">Múltiplos tamanhos</p>
+                    <p class="text-[9px] text-indigo-500 font-bold uppercase">Adiciona {{selectedQty}} de cada tamanho</p>
                 </div>
             </div>
             <button @click="isGridMode = !isGridMode" 
@@ -260,21 +312,24 @@ onMounted(fetchProducts)
                      class="absolute top-1 w-5 h-5 bg-white rounded-full transition-transform shadow-md"></div>
             </button>
         </div>
+        <div v-else class="mb-8 p-4 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-center">
+            <p class="text-[10px] font-bold text-slate-400 uppercase">Tamanho único disponível</p>
+        </div>
 
-        <h4 class="font-black text-[10px] uppercase tracking-widest mb-4">1. Selecione o Tamanho</h4>
-        <div class="flex flex-wrap gap-3 mb-8">
+        <h4 v-if="!isGridMode" class="font-black text-[10px] uppercase tracking-widest mb-4">1. Selecione o Tamanho</h4>
+        <div v-if="!isGridMode" class="flex flex-wrap gap-3 mb-8">
             <button v-for="(qtd, tam) in selectedProduct.variantes?.[0]?.grade" :key="tam"
                     @click="qtd > 0 ? selectedSize = tam : null"
                     :class="[
-                      selectedSize === tam ? 'bg-indigo-600 text-white shadow-indigo-200 shadow-xl scale-110' : 'bg-slate-50',
-                      qtd === 0 ? 'opacity-10 cursor-not-allowed' : 'border-2 border-transparent hover:border-indigo-200'
+                      selectedSize === tam ? 'bg-indigo-600 text-white shadow-xl scale-110' : 'bg-slate-50',
+                      qtd === 0 ? 'opacity-10 cursor-not-allowed' : 'border-2 border-transparent'
                     ]"
                     class="w-14 h-14 rounded-2xl flex items-center justify-center font-black transition-all">
                 {{ tam }}
             </button>
         </div>
 
-        <h4 class="font-black text-[10px] uppercase tracking-widest mb-4">2. Quantidade</h4>
+        <h4 class="font-black text-[10px] uppercase tracking-widest mb-4">{{ isGridMode ? '1' : '2' }}. Quantidade {{ isGridMode ? 'p/ cada Tamanho' : '' }}</h4>
         <div class="flex items-center gap-6 mb-10 bg-slate-50 w-max p-2 rounded-2xl border border-slate-100">
             <button @click="selectedQty = Math.max(1, selectedQty - 1)" class="w-10 h-10 flex items-center justify-center bg-white rounded-xl shadow-sm"><Minus class="w-4 h-4"/></button>
             <span class="font-black text-xl w-8 text-center">{{ selectedQty }}</span>
@@ -282,7 +337,7 @@ onMounted(fetchProducts)
         </div>
 
         <button @click="handleAddToCart" class="w-full bg-slate-900 py-6 rounded-[2rem] text-white font-black text-lg shadow-2xl active:scale-95 transition-all flex items-center justify-center gap-3">
-          <ShoppingBag class="w-6 h-6" /> {{ isGridMode ? 'ADICIONAR À GRADE' : 'ADICIONAR À CESTA' }}
+          <ShoppingBag class="w-6 h-6" /> {{ isGridMode ? 'ADICIONAR GRADE COMPLETA' : 'ADICIONAR À CESTA' }}
         </button>
       </div>
     </div>
