@@ -6,19 +6,23 @@ import Footer from '../components/Footer.vue'
 import { 
   Search, Trash2, Plus, Minus, ChevronDown, UserPlus, CreditCard, X, Save,
   Mouse, Keyboard, Monitor, Printer, Smartphone, HardDrive, Cpu, Laptop,
-  LayoutGrid, List as ListIcon, Percent, DollarSign, CheckCircle, FileText, AlertCircle
+  LayoutGrid, List as ListIcon, Percent, DollarSign, CheckCircle, FileText, AlertCircle, Loader2
 } from 'lucide-vue-next'
 
-const isSidebarOpen = ref(false)
-const viewType = ref('grid') // 'grid' ou 'list'
-const searchQuery = ref('') // Busca de produtos
+// --- CONFIGURAÇÃO DA API ---
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000' // Altere para sua URL se necessário
 
-// --- ESTADO DO CHECKOUT (ABAS) ---
-const activeTab = ref('payment') // 'discount', 'fees', 'payment'
+const isSidebarOpen = ref(false)
+const viewType = ref('grid') 
+const searchQuery = ref('') 
+const loading = ref(true)
+
+// --- ESTADO DO CHECKOUT ---
+const activeTab = ref('payment') 
 const discountValue = ref(0)
-const discountType = ref('fixed') // 'fixed' ou 'percent'
+const discountType = ref('fixed') 
 const feeValue = ref(0)
-const feeType = ref('fixed') // 'fixed' ou 'percent'
+const feeType = ref('fixed') 
 const paymentMethod = ref('PIX')
 const selectedCustomer = ref('João Silva')
 
@@ -26,7 +30,7 @@ const selectedCustomer = ref('João Silva')
 const isSplitModalOpen = ref(false)
 const isFinalizeChoiceOpen = ref(false)
 const isReceiptModalOpen = ref(false)
-const receiptType = ref('non-fiscal') // 'fiscal' ou 'non-fiscal'
+const receiptType = ref('non-fiscal') 
 const paymentLines = ref([])
 
 // --- PERSISTÊNCIA (LOCALSTORAGE) ---
@@ -48,19 +52,33 @@ const company = {
   email: 'contato@tudopassa.com.br'
 }
 
-// --- LISTA DE PRODUTOS ---
-const products = ref([
-  { id: 1, name: 'Camisas long', price: 40.00, code: 'INF001', image: '/assets/img/produtos/c1.png', discount: 0 },
-  { id: 2, name: 'Bermuda moletom Premium', price: 55.00, code: 'INF002', image: '/assets/img/produtos/c2.png', discount: 0 },
-  { id: 3, name: 'Short Linho', price: 39.00, code: 'INF003', image: '/assets/img/produtos/c3.png', discount: 0 },
-  { id: 4, name: 'Short Brim', price: 39.00, code: 'INF004', image: '/assets/img/produtos/c4.png', discount: 0 },
-  { id: 5, name: 'Short Cargo', price: 39.00, code: 'INF005', image: '/assets/img/produtos/c5.png', discount: 0 },
-  { id: 6, name: 'Camisa Over', price: 55.00, code: 'INF006', image: '/assets/img/produtos/c6.png', discount: 0 },
-  { id: 7, name: 'Regatas', price: 39.00, code: 'INF007', image: '/assets/img/produtos/c7.png', discount: 0 },
-  { id: 8, name: 'Mauricinho Premium', price: 50.00, code: 'INF008', image: '/assets/img/produtos/c8.png', discount: 0 },
-])
-
+// --- LISTA DE PRODUTOS (AGORA DINÂMICA) ---
+const products = ref([])
 const cart = ref([])
+
+const fetchProducts = async () => {
+  try {
+    loading.value = true
+    const res = await fetch(`${API_URL}/produtos`)
+    const data = await res.json()
+    
+    // Mapeamos os campos da API para os campos que o template já usa
+    if (Array.isArray(data)) {
+      products.value = data.map(p => ({
+        id: p.id || p.referencia,
+        name: p.descricao, // substitui name por descricao
+        price: p.variantes?.[0]?.valor_unitario || 0, // busca valor da primeira variante
+        code: p.referencia, // substitui code por referencia
+        image: p.imagem ? `${API_URL}/uploads/${p.imagem}` : '/assets/img/placeholder.png',
+        discount: 0
+      }))
+    }
+  } catch (e) {
+    console.error("Erro ao buscar produtos da API:", e)
+  } finally {
+    loading.value = false
+  }
+}
 
 // --- CÁLCULOS REATIVOS ---
 const filteredProducts = computed(() => {
@@ -173,7 +191,11 @@ const handleShortcuts = (event) => {
   }
 }
 
-onMounted(() => window.addEventListener('keydown', handleShortcuts))
+onMounted(() => {
+  fetchProducts()
+  window.addEventListener('keydown', handleShortcuts)
+})
+
 onUnmounted(() => window.removeEventListener('keydown', handleShortcuts))
 </script>
 
@@ -201,7 +223,7 @@ onUnmounted(() => window.removeEventListener('keydown', handleShortcuts))
           <div class="flex items-center gap-4 mb-6">
             <div class="relative flex-1 group">
               <Search class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5 group-focus-within:text-indigo-500" />
-              <input type="text" v-model="searchQuery" placeholder="Buscar por código ou nome..." 
+              <input type="text" v-model="searchQuery" placeholder="Buscar por referência ou descrição..." 
                 class="w-full pl-12 pr-4 py-4 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-indigo-500/10 shadow-sm transition-all">
             </div>
             
@@ -215,8 +237,14 @@ onUnmounted(() => window.removeEventListener('keydown', handleShortcuts))
             </div>
           </div>
 
+          <!-- ESTADO DE CARREGAMENTO -->
+          <div v-if="loading" class="flex-1 flex flex-col items-center justify-center gap-3 text-slate-400">
+            <Loader2 class="w-10 h-10 animate-spin text-indigo-500" />
+            <p class="font-bold text-xs uppercase tracking-widest">Carregando estoque...</p>
+          </div>
+
           <!-- VISÃO GRID -->
-          <div v-if="viewType === 'grid'" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 animate-in fade-in duration-300">
+          <div v-else-if="viewType === 'grid'" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 animate-in fade-in duration-300">
             <div v-for="p in filteredProducts" :key="p.id" @click="addToCart(p)"
               class="group bg-white p-4 rounded-[2rem] border border-slate-200 hover:border-indigo-200 hover:shadow-lg transition-all cursor-pointer flex flex-col">
               <div class="aspect-square bg-slate-50 rounded-2xl mb-3 flex items-center justify-center border border-slate-100 group-hover:bg-indigo-50 overflow-hidden">
@@ -282,7 +310,7 @@ onUnmounted(() => window.removeEventListener('keydown', handleShortcuts))
           </div>
         </section>
 
-        <!-- COLUNA DIREITA: CHECKOUT -->
+        <!-- COLUNA DIREITA: CHECKOUT (Mantida igual) -->
         <section class="w-full lg:w-[420px] flex flex-col gap-4">
           <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
             <span class="text-sm font-semibold text-slate-600 px-1">Cliente:</span>
