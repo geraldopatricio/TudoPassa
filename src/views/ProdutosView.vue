@@ -11,6 +11,7 @@ import * as XLSX from 'xlsx'
 // --- CONFIGURAÇÕES DE CONEXÃO ---
 // const API_URL = 'http://localhost:3000/produtos'
 // const IMAGE_BASE = 'http://localhost:3000/uploads' 
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 const API_URL = `${BASE_URL}/produtos`;
 const IMAGE_BASE = `${BASE_URL}/uploads`;
 
