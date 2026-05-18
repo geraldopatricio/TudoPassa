@@ -37,22 +37,27 @@ const emit = defineEmits(['close'])
         <LayoutDashboard class="w-5 h-5 group-hover:text-indigo-600" /> 
         <span class="font-medium">Dashboard</span>
       </a>
-      <a href="#" class="flex items-center gap-3 px-4 py-3 bg-indigo-50 text-indigo-600 rounded-2xl shadow-sm border border-indigo-100/50">
+      
+      <router-link to="/pdv" class="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 rounded-2xl transition-all group" active-class="bg-indigo-50 !text-indigo-600 shadow-sm border border-indigo-100/50">
         <ShoppingCart class="w-5 h-5" /> 
         <span class="font-bold">PDV Vendas</span>
-      </a>
-      <a href="ecommerce" class="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 rounded-2xl transition-all group">
+      </router-link>
+
+      <a href="ecommerce" target="_blank" class="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 rounded-2xl transition-all group">
         <Store class="w-5 h-5" /> 
         <span class="font-bold">E-Commerce</span>
-      </a>
-      <a href="#" class="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 rounded-2xl transition-all group">
-        <Package class="w-5 h-5 group-hover:text-indigo-600" /> 
+      </a>      
+
+      <router-link to="/produtos" class="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 rounded-2xl transition-all group" active-class="bg-indigo-50 !text-indigo-600 shadow-sm border border-indigo-100/50">
+        <Package class="w-5 h-5" /> 
         <span class="font-medium">Produtos</span>
-      </a>
-      <a href="#" class="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 rounded-2xl transition-all group">
-        <Users class="w-5 h-5 group-hover:text-indigo-600" /> 
+      </router-link>
+
+      <router-link to="/clientes" class="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 rounded-2xl transition-all group" active-class="bg-indigo-50 !text-indigo-600 shadow-sm border border-indigo-100/50">
+        <Users class="w-5 h-5" /> 
         <span class="font-medium">Clientes</span>
-      </a>
+      </router-link>
+
     </nav>
 
     <div class="p-6 mt-auto border-t border-slate-100">
