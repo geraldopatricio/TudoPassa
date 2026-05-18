@@ -5,7 +5,9 @@ import NavBar from '../components/NavBar.vue'
 import { Search, Plus, Pencil, Trash2, Download, Upload, X, Save } from 'lucide-vue-next'
 import * as XLSX from 'xlsx'
 
-const API_URL = 'http://localhost:3000/clientes'
+// const API_URL = 'http://localhost:3000/clientes'
+const API_URL = `${BASE_URL}/clientes`;
+  
 const clientes = ref([])
 const searchQuery = ref('')
 const isModalOpen = ref(false)
