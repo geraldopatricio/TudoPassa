@@ -1,3 +1,4 @@
+
 import { createRouter, createWebHistory } from 'vue-router'
 import LoginView from '../views/LoginView.vue'
 import PDVView from '../views/PDVView.vue'
@@ -37,4 +38,3 @@ const router = createRouter({
 })
 
 export default router
-
