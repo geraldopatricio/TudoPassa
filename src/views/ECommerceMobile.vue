@@ -21,146 +21,98 @@ const selectedProduct = ref(null)
 const isZoomed = ref(false)
 const selectedSize = ref(null)
 const selectedQty = ref(1)
-const isGridMode = ref(false) // Controle do Modo Grade em Lote
+const isGridMode = ref(false)
 
-// Paginação e Busca
+// Paginação e Busca de Produtos
 const currentPage = ref(1)
 const itemsPerPage = ref(4)
 const searchQuery = ref('')
 
-// Checkout e Frete
-const customer = ref({ 
-  nome: '', 
-  cpf: '', 
-  email: '', 
-  whatsapp: '', 
-  endereco: '' 
-})
+// Checkout e Clientes
+const customer = ref({ nome: '', cpf: '', email: '', whatsapp: '', endereco: '' })
+const allCustomers = ref([]) // Lista do banco
+const customerSearchQuery = ref('')
+const showCustomerSuggestions = ref(false)
 const shippingValue = ref(0)
 const calculatingShipping = ref(false)
 const pixData = ref(null)
 
-// --- MÉTODOS DE DADOS ---
+// --- MÉTODOS DE CARREGAMENTO ---
 const fetchProducts = async () => {
   try {
     loading.value = true
     const res = await fetch(`${API_URL}/produtos`)
     const data = await res.json()
     products.value = Array.isArray(data) ? data : []
-  } catch (e) { 
-    console.error("Erro ao buscar produtos:", e) 
-  } finally { 
-    setTimeout(() => { loading.value = false }, 800) 
-  }
+  } catch (e) { console.error(e) } finally { setTimeout(() => { loading.value = false }, 800) }
 }
 
-// --- LÓGICA DE FILTRO E PAGINAÇÃO ---
+const fetchAllCustomers = async () => {
+  try {
+    const res = await fetch(`${API_URL}/clientes`)
+    allCustomers.value = await res.json()
+  } catch (e) { console.error(e) }
+}
+
+// --- LÓGICA DE FILTRO (PRODUTOS E CLIENTES) ---
 const filteredBase = computed(() => {
   if (!searchQuery.value) return products.value
-  return products.value.filter(p => 
-    p.descricao?.toLowerCase().includes(searchQuery.value.toLowerCase())
+  return products.value.filter(p => p.descricao?.toLowerCase().includes(searchQuery.value.toLowerCase()))
+})
+
+const filteredCustomers = computed(() => {
+  if (!customerSearchQuery.value) return []
+  return allCustomers.value.filter(c => 
+    c.nome.toLowerCase().includes(customerSearchQuery.value.toLowerCase()) ||
+    c.email.toLowerCase().includes(customerSearchQuery.value.toLowerCase())
   )
 })
 
 const totalPages = computed(() => Math.ceil(filteredBase.value.length / itemsPerPage.value) || 1)
-
 const paginatedProducts = computed(() => {
   const start = (currentPage.value - 1) * itemsPerPage.value
-  const end = start + itemsPerPage.value
-  return filteredBase.value.slice(start, end)
+  return filteredBase.value.slice(start, start + itemsPerPage.value)
 })
 
-// --- CÁLCULOS DE VALORES ---
-const subtotalCart = computed(() => {
-  return cart.value.reduce((acc, item) => acc + item.totalPrice, 0)
-})
-
-const totalFinal = computed(() => {
-  return subtotalCart.value + shippingValue.value
-})
-
-// REGRA: Flag de grade só aparece se houver mais de 1 tamanho disponível com estoque
-const hasMultipleSizes = computed(() => {
-  if (!selectedProduct.value) return false
-  const grade = selectedProduct.value.variantes?.[0]?.grade || {}
-  const availableSizes = Object.keys(grade).filter(tam => grade[tam] > 0)
-  return availableSizes.length > 1
-})
-
-// --- SIMULAÇÃO DE FRETE ---
-const calculateShipping = () => {
-  if (customer.value.endereco.length > 10) {
-    calculatingShipping.value = true
-    setTimeout(() => {
-      // Simulação: valor entre 15 e 35 reais
-      shippingValue.value = Math.floor(Math.random() * (35 - 15 + 1)) + 15
-      calculatingShipping.value = false
-    }, 1500)
+// --- LÓGICA DE CLIENTES (PERSISTÊNCIA) ---
+const selectCustomer = (c) => {
+  customer.value = {
+    nome: c.nome,
+    cpf: c.cpf_cnpj,
+    email: c.email,
+    whatsapp: c.celular,
+    endereco: c.endereco
   }
+  customerSearchQuery.value = c.nome
+  showCustomerSuggestions.value = false
+  calculateShipping()
 }
 
-// --- FUNÇÕES DE NAVEGAÇÃO E CARRINHO ---
-const openDetails = (p) => {
-  selectedProduct.value = p
-  selectedSize.value = null
-  selectedQty.value = 1
-  isGridMode.value = false
-  currentStep.value = 'details'
-  window.scrollTo(0, 0)
+const checkExistingCustomer = () => {
+  const existing = allCustomers.value.find(c => c.email.toLowerCase() === customer.value.email.toLowerCase())
+  if (existing) selectCustomer(existing)
 }
 
-const handleAddToCart = () => {
-  // Se não for modo grade, exige que selecione um tamanho
-  if (!isGridMode.value && !selectedSize.value) {
-    alert("Por favor, selecione um tamanho!")
-    return
+const saveCustomerToDB = async () => {
+  const clienteData = {
+    codigo: customer.value.cpf.replace(/\D/g, ''),
+    nome: customer.value.nome,
+    cpf_cnpj: customer.value.cpf,
+    celular: customer.value.whatsapp,
+    email: customer.value.email,
+    endereco: customer.value.endereco
   }
-
-  const variante = selectedProduct.value.variantes[0]
-  const valorUnitario = variante.valor_unitario
-
-  if (isGridMode.value && hasMultipleSizes.value) {
-    // NOVA REGRA: ADIÇÃO EM LOTE (GRADE INTEIRA)
-    Object.keys(variante.grade).forEach(tam => {
-      if (variante.grade[tam] > 0) { // Apenas tamanhos com estoque
-        const item = {
-          cartId: Date.now() + Math.random(),
-          referencia: selectedProduct.value.referencia,
-          descricao: selectedProduct.value.descricao,
-          imagem: selectedProduct.value.imagem,
-          chosenSize: tam,
-          chosenQty: selectedQty.value,
-          unitPrice: valorUnitario,
-          totalPrice: valorUnitario * selectedQty.value
-        }
-        cart.value.push(item)
-      }
-    })
-  } else {
-    // COMPRA NORMAL: APENAS UM ITEM
-    const item = {
-      cartId: Date.now() + Math.random(),
-      referencia: selectedProduct.value.referencia,
-      descricao: selectedProduct.value.descricao,
-      imagem: selectedProduct.value.imagem,
-      chosenSize: selectedSize.value,
-      chosenQty: selectedQty.value,
-      unitPrice: valorUnitario,
-      totalPrice: valorUnitario * selectedQty.value
-    }
-    cart.value.push(item)
-  }
-
-  localStorage.setItem('gp_cart', JSON.stringify(cart.value))
-  currentStep.value = 'cart-summary'
+  const exists = allCustomers.value.find(c => c.email === customer.value.email)
+  const method = exists ? 'PUT' : 'POST'
+  const url = exists ? `${API_URL}/clientes/${clienteData.codigo}` : `${API_URL}/clientes`
+  await fetch(url, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(clienteData)
+  })
 }
 
-const removeFromCart = (cartId) => {
-  cart.value = cart.value.filter(i => i.cartId !== cartId)
-  localStorage.setItem('gp_cart', JSON.stringify(cart.value))
-}
-
-// --- PAGAMENTO E NOTIFICAÇÃO ---
+// --- PAGAMENTO (A VERSÃO ÚNICA E CORRETA) ---
 const handlePayment = async () => {
   if (!customer.value.nome || !customer.value.email || shippingValue.value === 0) {
     alert("Preencha seus dados e aguarde o cálculo do frete!")
@@ -168,7 +120,10 @@ const handlePayment = async () => {
   }
 
   try {
-    // 1. GERAÇÃO DO PIX NO ASAAS
+    // 1. Salva/Atualiza o cliente no banco
+    await saveCustomerToDB()
+
+    // 2. GERAÇÃO DO PIX NO ASAAS
     const res = await fetch(`${API_URL}/produtos/checkout/pix`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -176,66 +131,96 @@ const handlePayment = async () => {
         nome: customer.value.nome,
         email: customer.value.email,
         cpf: customer.value.cpf,
-        valor: totalFinal.value
+        valor: subtotalCart.value + shippingValue.value
       })
     })
     const data = await res.json()
     
     if (data.success) {
       pixData.value = data
-      
-      // 2. DISPARO DO E-MAIL DE NOTIFICAÇÃO (BACKEND)
-      // Chamando a rota direta no server.js para evitar 404
+      // 3. NOTIFICAÇÃO POR E-MAIL
       await fetch(`${API_URL}/produtos/notificar-pedido`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           cliente: customer.value,
           itens: cart.value,
-          total: totalFinal.value,
+          total: subtotalCart.value + shippingValue.value,
           frete: shippingValue.value
         })
       })
     } else {
-      alert("Erro Asaas: " + (data.error || "Falha na cobrança"))
+      alert("Erro no pagamento: " + data.error)
     }
   } catch (e) {
-    console.error(e)
     alert("Erro de conexão com o servidor.")
   }
 }
 
-// --- MAPA E RASTREIO ---
+// --- CÁLCULOS, CARRINHO E MAPA (MANTIDOS) ---
+const subtotalCart = computed(() => cart.value.reduce((acc, item) => acc + item.totalPrice, 0))
+const totalFinal = computed(() => subtotalCart.value + shippingValue.value)
+const hasMultipleSizes = computed(() => {
+  if (!selectedProduct.value) return false
+  const grade = selectedProduct.value.variantes?.[0]?.grade || {}
+  return Object.keys(grade).filter(tam => grade[tam] > 0).length > 1
+})
+
+const calculateShipping = () => {
+  if (customer.value.endereco.length > 10) {
+    calculatingShipping.value = true
+    setTimeout(() => {
+      shippingValue.value = Math.floor(Math.random() * (35 - 15 + 1)) + 15
+      calculatingShipping.value = false
+    }, 1500)
+  }
+}
+
+const openDetails = (p) => {
+  selectedProduct.value = p; selectedSize.value = null; selectedQty.value = 1;
+  isGridMode.value = false; currentStep.value = 'details'; window.scrollTo(0, 0);
+}
+
+const handleAddToCart = () => {
+  if (!isGridMode.value && !selectedSize.value) { alert("Selecione um tamanho!"); return; }
+  const v = selectedProduct.value.variantes[0]
+  if (isGridMode.value && hasMultipleSizes.value) {
+    Object.keys(v.grade).forEach(tam => {
+      if (v.grade[tam] > 0) cart.value.push({
+        cartId: Date.now() + Math.random(), referencia: selectedProduct.value.referencia,
+        descricao: selectedProduct.value.descricao, imagem: selectedProduct.value.imagem,
+        chosenSize: tam, chosenQty: selectedQty.value, unitPrice: v.valor_unitario, totalPrice: v.valor_unitario * selectedQty.value
+      })
+    })
+  } else {
+    cart.value.push({
+      cartId: Date.now() + Math.random(), referencia: selectedProduct.value.referencia,
+      descricao: selectedProduct.value.descricao, imagem: selectedProduct.value.imagem,
+      chosenSize: selectedSize.value, chosenQty: selectedQty.value, unitPrice: v.valor_unitario, totalPrice: v.valor_unitario * selectedQty.value
+    })
+  }
+  localStorage.setItem('gp_cart', JSON.stringify(cart.value))
+  currentStep.value = 'cart-summary'
+}
+
+const removeFromCart = (id) => { cart.value = cart.value.filter(i => i.cartId !== id); localStorage.setItem('gp_cart', JSON.stringify(cart.value)) }
+
 const initMap = () => {
   if (!window.mapboxgl) return
   mapboxgl.accessToken = MAPBOX_TOKEN
-  
-  // Timeout para garantir que o DOM renderizou o container #map
   setTimeout(() => {
-    const map = new mapboxgl.Map({
-      container: 'map',
-      style: 'mapbox://styles/mapbox/streets-v12',
-      center: [-38.5267, -3.7319], // Ex: Fortaleza
-      zoom: 14
-    })
-    
-    new mapboxgl.Marker({ color: '#4f46e5' })
-      .setLngLat([-38.5267, -3.7319])
-      .addTo(map)
-
-    // Forçar o mapa a preencher o espaço após animação
-    map.on('load', () => { map.resize() })
+    const map = new mapboxgl.Map({ container: 'map', style: 'mapbox://styles/mapbox/streets-v12', center: [-38.5267, -3.7319], zoom: 14 })
+    new mapboxgl.Marker({ color: '#4f46e5' }).setLngLat([-38.5267, -3.7319]).addTo(map)
+    map.on('load', () => map.resize())
   }, 500)
 }
 
-const finishAndTrack = () => {
-  currentStep.value = 'tracking'
-  cart.value = []
-  localStorage.removeItem('gp_cart')
-  nextTick(() => initMap())
-}
+const finishAndTrack = () => { currentStep.value = 'tracking'; cart.value = []; localStorage.removeItem('gp_cart'); nextTick(() => initMap()) }
 
-onMounted(fetchProducts)
+onMounted(() => {
+  fetchProducts()
+  fetchAllCustomers()
+})
 </script>
 
 <template>
@@ -478,19 +463,61 @@ onMounted(fetchProducts)
 
     <!-- STEP 4: CHECKOUT (DADOS + PIX) -->
     <div v-if="currentStep === 'checkout'" class="p-8 animate-in slide-in-from-right duration-500">
-        <h2 class="text-4xl font-black mb-8 italic tracking-tighter text-indigo-600">Checkout.</h2>
-        
-        <div class="space-y-4 mb-10">
-            <div class="relative">
-              <input v-model="customer.nome" placeholder="Nome Completo" class="w-full p-6 bg-white rounded-[1.5rem] border-none shadow-sm outline-none focus:ring-2 ring-indigo-500/20 font-bold text-sm">
-            </div>
-            <input v-model="customer.email" type="email" placeholder="E-mail (Para confirmar pedido)" class="w-full p-6 bg-white rounded-[1.5rem] border-none shadow-sm outline-none focus:ring-2 ring-indigo-500/20 font-bold text-sm">
-            <div class="grid grid-cols-2 gap-4">
-              <input v-model="customer.cpf" placeholder="CPF" class="w-full p-6 bg-white rounded-[1.5rem] border-none shadow-sm outline-none focus:ring-2 ring-indigo-500/20 font-bold text-sm">
-              <input v-model="customer.whatsapp" placeholder="WhatsApp" class="w-full p-6 bg-white rounded-[1.5rem] border-none shadow-sm outline-none focus:ring-2 ring-indigo-500/20 font-bold text-sm">
-            </div>
-            <input v-model="customer.endereco" @blur="calculateShipping" placeholder="Endereço Completo de Entrega" class="w-full p-6 bg-white rounded-[1.5rem] border-none shadow-sm outline-none focus:ring-2 ring-indigo-500/20 font-bold text-sm">
+    <h2 class="text-4xl font-black mb-4 italic tracking-tighter text-indigo-600">Checkout.</h2>
+    
+    <!-- PESQUISA DE CLIENTE EXISTENTE -->
+    <div class="relative mb-8">
+        <label class="text-[10px] font-black uppercase text-slate-400 ml-2 mb-2 block">Já é cliente? Busque aqui:</label>
+        <div class="relative">
+            <input 
+                v-model="customerSearchQuery" 
+                @focus="showCustomerSuggestions = true"
+                placeholder="Pesquisar por nome ou e-mail..." 
+                class="w-full p-4 bg-indigo-50 rounded-2xl border-2 border-transparent focus:border-indigo-200 outline-none font-bold text-xs"
+            >
+            <Search class="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-indigo-300" />
         </div>
+        
+        <!-- Lista de Sugestões -->
+        <div v-if="showCustomerSuggestions && filteredCustomers.length > 0" class="absolute z-50 w-full mt-2 bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden">
+            <div 
+                v-for="c in filteredCustomers" :key="c.codigo"
+                @click="selectCustomer(c)"
+                class="p-4 hover:bg-indigo-50 border-b border-slate-50 last:border-none cursor-pointer transition-colors"
+            >
+                <p class="font-black text-xs text-slate-800">{{ c.nome }}</p>
+                <p class="text-[10px] text-slate-400">{{ c.email }}</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="h-px bg-slate-100 w-full mb-8"></div>
+
+    <!-- FORMULÁRIO DE DADOS -->
+    <div class="space-y-4 mb-10">
+        <input 
+            v-model="customer.email" 
+            @blur="checkExistingCustomer" 
+            type="email" 
+            placeholder="E-mail" 
+            class="w-full p-6 bg-white rounded-[1.5rem] border-none shadow-sm outline-none focus:ring-2 ring-indigo-500/20 font-bold text-sm"
+        >
+        <input 
+            v-model="customer.nome" 
+            placeholder="Nome Completo" 
+            class="w-full p-6 bg-white rounded-[1.5rem] border-none shadow-sm outline-none focus:ring-2 ring-indigo-500/20 font-bold text-sm"
+        >
+        <div class="grid grid-cols-2 gap-4">
+          <input v-model="customer.cpf" placeholder="CPF" class="w-full p-6 bg-white rounded-[1.5rem] border-none shadow-sm outline-none focus:ring-2 ring-indigo-500/20 font-bold text-sm">
+          <input v-model="customer.whatsapp" placeholder="WhatsApp" class="w-full p-6 bg-white rounded-[1.5rem] border-none shadow-sm outline-none focus:ring-2 ring-indigo-500/20 font-bold text-sm">
+        </div>
+        <input 
+            v-model="customer.endereco" 
+            @blur="calculateShipping" 
+            placeholder="Endereço de Entrega" 
+            class="w-full p-6 bg-white rounded-[1.5rem] border-none shadow-sm outline-none focus:ring-2 ring-indigo-500/20 font-bold text-sm"
+        >
+    </div>
 
         <!-- Box de Entrega (SuperFrete) -->
         <div class="bg-white p-8 rounded-[2.5rem] border border-slate-100 mb-10 shadow-sm">
