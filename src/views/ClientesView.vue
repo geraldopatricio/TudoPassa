@@ -6,6 +6,7 @@ import { Search, Plus, Pencil, Trash2, Download, Upload, X, Save } from 'lucide-
 import * as XLSX from 'xlsx'
 
 // const API_URL = 'http://localhost:3000/clientes'
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 const API_URL = `${BASE_URL}/clientes`;
   
 const clientes = ref([])
