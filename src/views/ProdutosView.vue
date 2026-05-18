@@ -9,9 +9,10 @@ import {
 import * as XLSX from 'xlsx'
 
 // --- CONFIGURAÇÕES DE CONEXÃO ---
-const API_URL = 'http://localhost:3000/produtos'
-// Ajustado para bater com o app.use('/uploads', ...) do seu server.js
-const IMAGE_BASE = 'http://localhost:3000/uploads' 
+// const API_URL = 'http://localhost:3000/produtos'
+// const IMAGE_BASE = 'http://localhost:3000/uploads' 
+const API_URL = `${BASE_URL}/produtos`;
+const IMAGE_BASE = `${BASE_URL}/uploads`;
 
 const produtos = ref([])
 const searchQuery = ref('')
