@@ -12,6 +12,7 @@ import {
 // --- CONFIGURAÇÃO DA API ---
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000' // Altere para sua URL se necessário
 
+
 const isSidebarOpen = ref(false)
 const viewType = ref('grid') 
 const searchQuery = ref('') 
@@ -32,6 +33,64 @@ const isFinalizeChoiceOpen = ref(false)
 const isReceiptModalOpen = ref(false)
 const receiptType = ref('non-fiscal') 
 const paymentLines = ref([])
+
+// --- NOVOS ESTADOS PARA CLIENTES ---
+const allCustomers = ref([])
+const isCustomerModalOpen = ref(false)
+const newCustomer = ref({
+  codigo: '', nome: '', cpf_cnpj: '', celular: '', email: '',
+  endereco: '', numero: '', bairro: '', cidade: '', uf: '', cep: ''
+})
+
+// Buscar clientes do banco
+const fetchAllCustomers = async () => {
+  try {
+    const res = await fetch(`${API_URL}/clientes`)
+    allCustomers.value = await res.json()
+    
+    // Se não houver cliente selecionado, define o primeiro como padrão ou mantém vazio
+    if (allCustomers.value.length > 0 && selectedCustomer.value === 'João Silva') {
+      selectedCustomer.value = allCustomers.value[0].nome
+    }
+  } catch (e) {
+    console.error("Erro ao carregar clientes:", e)
+  }
+}
+
+// Salvar novo cliente e selecionar automaticamente
+const saveQuickCustomer = async () => {
+  try {
+    // Gerar um código simples baseado no timestamp se estiver vazio
+    if (!newCustomer.value.codigo) newCustomer.value.codigo = Date.now().toString()
+
+    const res = await fetch(`${API_URL}/clientes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newCustomer.value)
+    })
+
+    if (res.ok) {
+      const saved = await res.json()
+      await fetchAllCustomers() // Atualiza a lista
+      selectedCustomer.value = saved.nome // Seleciona o novo
+      isCustomerModalOpen.value = false // Fecha modal
+      // Limpa o formulário
+      newCustomer.value = { codigo: '', nome: '', cpf_cnpj: '', celular: '', email: '', endereco: '', numero: '', bairro: '', cidade: '', uf: '', cep: '' }
+    } else {
+      const err = await res.json()
+      alert(err.message || "Erro ao cadastrar cliente")
+    }
+  } catch (e) {
+    alert("Erro de conexão com o servidor")
+  }
+}
+
+// Chamar a busca no onMounted
+onMounted(() => {
+  fetchProducts()
+  fetchAllCustomers() // Adicionado aqui
+  window.addEventListener('keydown', handleShortcuts)
+})
 
 // --- PERSISTÊNCIA (LOCALSTORAGE) ---
 const savedOrders = ref(JSON.parse(localStorage.getItem('gpsoft_pedidos_salvos') || '[]'))
@@ -312,14 +371,24 @@ onUnmounted(() => window.removeEventListener('keydown', handleShortcuts))
 
         <!-- COLUNA DIREITA: CHECKOUT (Mantida igual) -->
         <section class="w-full lg:w-[420px] flex flex-col gap-4">
+          <!-- SEÇÃO CLIENTE NO PDV -->
           <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-            <span class="text-sm font-semibold text-slate-600 px-1">Cliente:</span>
-            <div class="relative mt-2">
-              <select v-model="selectedCustomer" class="w-full appearance-none bg-white border border-slate-200 rounded-xl px-4 py-2.5 pl-10 text-sm font-medium text-slate-700 outline-none">
-                <option>João Silva</option>
-                <option>Maria Oliveira</option>
+            <div class="flex justify-between items-center mb-2 px-1">
+              <span class="text-sm font-semibold text-slate-600">Cliente:</span>
+              <button @click="isCustomerModalOpen = true" class="text-indigo-600 hover:text-indigo-700 flex items-center gap-1 text-[10px] font-black uppercase tracking-widest">
+                <Plus class="w-3 h-3" /> Cadastrar Novo
+              </button>
+            </div>
+            
+            <div class="relative">
+              <select v-model="selectedCustomer" class="w-full appearance-none bg-white border border-slate-200 rounded-xl px-4 py-2.5 pl-10 text-sm font-medium text-slate-700 outline-none focus:ring-2 ring-indigo-500/10 transition-all">
+                <option v-for="c in allCustomers" :key="c.codigo" :value="c.nome">
+                  {{ c.nome }} ({{ c.cpf_cnpj }})
+                </option>
               </select>
-              <div class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"><UserPlus class="w-4 h-4"/></div>
+              <div class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+                <UserPlus class="w-4 h-4"/>
+              </div>
               <ChevronDown class="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 pointer-events-none" />
             </div>
           </div>
@@ -509,6 +578,44 @@ onUnmounted(() => window.removeEventListener('keydown', handleShortcuts))
         <button @click="resetSale" class="w-full py-3 bg-slate-800 text-white rounded-lg font-bold print:hidden">Fechar e Novo Atendimento</button>
       </div>
     </div>
+
+    <!-- MODAL CADASTRO RÁPIDO DE CLIENTE -->
+    <div v-if="isCustomerModalOpen" class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+      <div class="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in duration-200">
+        <div class="p-6 flex justify-between items-center border-b border-slate-100">
+          <h2 class="text-lg font-black text-slate-800 uppercase italic">Novo Cliente</h2>
+          <button @click="isCustomerModalOpen = false" class="p-2 hover:bg-slate-100 rounded-full"><X class="w-5 h-5 text-slate-400" /></button>
+        </div>
+        
+        <div class="p-6 grid grid-cols-2 gap-4">
+          <div class="col-span-2 space-y-1">
+            <label class="text-[9px] font-black uppercase text-slate-400 ml-1">Nome Completo</label>
+            <input v-model="newCustomer.nome" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-indigo-500 text-sm">
+          </div>
+          <div class="space-y-1">
+            <label class="text-[9px] font-black uppercase text-slate-400 ml-1">CPF/CNPJ</label>
+            <input v-model="newCustomer.cpf_cnpj" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-indigo-500 text-sm">
+          </div>
+          <div class="space-y-1">
+            <label class="text-[9px] font-black uppercase text-slate-400 ml-1">WhatsApp</label>
+            <input v-model="newCustomer.celular" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-indigo-500 text-sm">
+          </div>
+          <div class="col-span-2 space-y-1">
+            <label class="text-[9px] font-black uppercase text-slate-400 ml-1">Endereço de Entrega</label>
+            <input v-model="newCustomer.endereco" placeholder="Rua, Número, Bairro..." class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-indigo-500 text-sm">
+          </div>
+        </div>
+
+        <div class="p-6 bg-slate-50 flex gap-3">
+          <button @click="isCustomerModalOpen = false" class="flex-1 py-3 font-bold text-slate-500 hover:bg-white rounded-xl transition-all text-xs">Cancelar</button>
+          <button @click="saveQuickCustomer" class="flex-[2] py-3 bg-indigo-600 text-white font-black uppercase tracking-widest rounded-xl shadow-lg flex items-center justify-center gap-2 text-xs">
+            <CheckCircle class="w-4 h-4" /> Finalizar Cadastro
+          </button>
+        </div>
+      </div>
+    </div>
+
+
   </div>
 </template>
 
