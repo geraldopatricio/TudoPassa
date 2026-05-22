@@ -47,14 +47,18 @@ const fetchProducts = async () => {
     const res = await fetch(`${API_URL}/produtos`)
     const data = await res.json()
     products.value = Array.isArray(data) ? data : []
-  } catch (e) { console.error(e) } finally { setTimeout(() => { loading.value = false }, 800) }
+  } catch (e) { 
+    console.error("ERRO REAL:", e);
+  } finally { setTimeout(() => { loading.value = false }, 800) }
 }
 
 const fetchAllCustomers = async () => {
   try {
     const res = await fetch(`${API_URL}/clientes`)
     allCustomers.value = await res.json()
-  } catch (e) { console.error(e) }
+  } catch (e) { 
+    console.error("ERRO REAL:", e)
+  }
 }
 
 // --- LÓGICA DE FILTRO ---
@@ -98,9 +102,9 @@ const checkExistingCustomer = () => {
 
 const saveCustomerToDB = async () => {
   const clienteData = {
-    codigo: customer.value.cpf.replace(/\D/g, ''),
+    codigo: String(customer.value.cpf || '').replace(/\D/g, ''), 
     nome: customer.value.nome,
-    cpf_cnpj: customer.value.cpf,
+    cpf_cnpj: String(customer.value.cpf || ''),
     celular: customer.value.whatsapp,
     email: customer.value.email,
     endereco: customer.value.endereco
@@ -117,6 +121,7 @@ const saveCustomerToDB = async () => {
 
 // --- PAGAMENTO ---
 const handlePayment = async () => {
+  console.log("Tentando conectar em:", `${API_URL}/produtos/checkout/pix`); 
   if (!customer.value.nome || !customer.value.email || shippingValue.value === 0) {
     alert("Preencha seus dados e aguarde o cálculo do frete!")
     return
@@ -130,7 +135,7 @@ const handlePayment = async () => {
       body: JSON.stringify({
         nome: customer.value.nome,
         email: customer.value.email,
-        cpf: customer.value.cpf,
+        cpf: String(customer.value.cpf || '').replace(/\D/g, ''), 
         valor: subtotalCart.value + shippingValue.value
       })
     })
@@ -152,6 +157,7 @@ const handlePayment = async () => {
       alert("Erro no pagamento: " + data.error)
     }
   } catch (e) {
+    console.error("ERRO REAL:", e); 
     alert("Erro de conexão com o servidor.")
   }
 }
