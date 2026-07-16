@@ -1,7 +1,7 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Menu, ChevronDown, LogOut, Bell, ShoppingBag, X } from 'lucide-vue-next'
+import { Menu, ChevronDown, LogOut, Bell, ShoppingBag, X, User } from 'lucide-vue-next'
 
 const props = defineProps({
   savedOrders: { type: Array, default: () => [] }
@@ -13,19 +13,41 @@ const router = useRouter()
 const isProfileOpen = ref(false)
 const isNotificationsOpen = ref(false)
 
+// Configurações do Usuário
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const usuarioLogado = ref({
+  login: 'Usuário',
+  tipo: 'Nível',
+  foto: null
+})
+
+onMounted(() => {
+  const userData = localStorage.getItem('usuario')
+  if (userData) {
+    usuarioLogado.value = JSON.parse(userData)
+  }
+})
+
 const handleRestore = (order) => {
   emit('restoreOrder', order)
   isNotificationsOpen.value = false
 }
+
+const handleLogout = () => {
+  localStorage.removeItem('usuario') // Limpa os dados da sessão
+  router.push('/') // Redireciona para o login
+}
 </script>
 
 <template>
-  <header class="h-16 px-4 md:px-8 bg-indigo-600 flex justify-between items-center text-white shadow-lg z-30 shrink-0">
+  <header class="h-16 px-4 md:px-8 bg-indigo-600 flex justify-between items-center text-white shadow-lg z-30 shrink-0 transition-all duration-300">
     <div class="flex items-center gap-2 md:gap-4">
-      <button @click="emit('toggleSidebar')" class="lg:hidden p-2 hover:bg-white/10 rounded-lg transition-colors">
+      <button @click="emit('toggleSidebar')" class="p-2 hover:bg-white/10 rounded-lg transition-colors">
         <Menu class="w-6 h-6" />
       </button>
-      <h1 class="text-sm md:text-lg font-bold tracking-tight truncate max-w-[150px] md:max-w-none">PDV - Tudo Passa</h1>
+      <h1 class="text-sm md:text-lg font-bold tracking-tight truncate italic">
+        PDV - Tudo Passa
+      </h1>
     </div>
 
     <div class="flex items-center gap-2 md:gap-6">
@@ -40,6 +62,7 @@ const handleRestore = (order) => {
           </span>
         </button>
 
+        <!-- Dropdown de Notificações (Pedidos Salvos) -->
         <div v-if="isNotificationsOpen" 
           class="absolute right-[-50px] md:right-0 mt-3 w-[280px] md:w-80 bg-white rounded-2xl shadow-2xl border border-slate-100 py-4 text-slate-800 animate-in fade-in slide-in-from-top-5 duration-200">
           <div class="px-4 pb-3 border-b border-slate-50 flex justify-between items-center">
@@ -62,22 +85,35 @@ const handleRestore = (order) => {
         </div>
       </div>
 
-      <!-- Perfil -->
+      <!-- Perfil do Usuário Dinâmico -->
       <div class="relative">
         <button @click="isProfileOpen = !isProfileOpen" 
           class="flex items-center gap-2 p-1 pr-3 hover:bg-white/10 rounded-full transition-all border border-transparent hover:border-white/20">
-          <div class="w-8 h-8 rounded-full bg-indigo-400 border-2 border-white flex items-center justify-center font-bold text-xs">GP</div>
-          <span class="text-sm font-bold hidden md:block">Geraldo Patrício</span>
+          
+          <!-- Foto ou Inicial -->
+          <div class="w-8 h-8 rounded-full bg-indigo-400 border-2 border-white flex items-center justify-center font-bold text-xs overflow-hidden shrink-0">
+            <img v-if="usuarioLogado.foto" 
+              :src="`${BASE_URL}/uploads/usuarios/${usuarioLogado.foto}`" 
+              class="w-full h-full object-cover" 
+            />
+            <span v-else>{{ usuarioLogado.login.charAt(0).toUpperCase() }}</span>
+          </div>
+
+          <span class="text-sm font-bold hidden md:block max-w-[120px] truncate">
+            {{ usuarioLogado.login }}
+          </span>
           <ChevronDown class="w-4 h-4 opacity-70 transition-transform" :class="{'rotate-180': isProfileOpen}" />
         </button>
 
+        <!-- Menu Dropdown do Perfil -->
         <div v-if="isProfileOpen" 
           class="absolute right-0 mt-3 w-56 bg-white rounded-2xl shadow-2xl border border-slate-100 py-2 text-slate-800 animate-in fade-in zoom-in duration-150">
           <div class="px-4 py-2 border-b border-slate-50 mb-1">
-            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Acesso</p>
-            <p class="text-sm font-bold">Administrador</p>
+            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Nível de Acesso</p>
+            <p class="text-sm font-bold text-indigo-600 truncate">{{ usuarioLogado.tipo || 'Usuário' }}</p>
           </div>
-          <button @click="router.push('/')" 
+          
+          <button @click="handleLogout" 
             class="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-bold text-red-500 hover:bg-red-50 transition-colors text-left">
             <LogOut class="w-4 h-4" /> Logoff / Sair
           </button>

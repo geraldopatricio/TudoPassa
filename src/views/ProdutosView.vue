@@ -1,7 +1,5 @@
 <script setup>
 import { ref, onMounted, computed, watch } from 'vue'
-import Sidebar from '../components/Sidebar.vue'
-import NavBar from '../components/NavBar.vue'
 import { 
   Search, Plus, Pencil, Trash2, Download, Upload, X, Save, 
   Image as ImageIcon, PlusCircle, ChevronLeft, ChevronRight, Loader2
@@ -13,7 +11,7 @@ import * as XLSX from 'xlsx'
 // const IMAGE_BASE = 'http://localhost:3000/uploads' 
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 const API_URL = `${BASE_URL}/produtos`;
-const IMAGE_BASE = `${BASE_URL}/uploads`;
+const IMAGE_BASE = `${BASE_URL}/uploads/produtos`;
 
 const produtos = ref([])
 const searchQuery = ref('')
@@ -43,51 +41,59 @@ const importExcel = (event) => {
     try {
       const data = new Uint8Array(e.target.result);
       const workbook = XLSX.read(data, { type: 'array' });
-      const sheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[sheetName];
-      const json = XLSX.utils.sheet_to_json(worksheet);
+      const json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
 
-      // Processar cada linha do Excel
       for (const row of json) {
-        // Mapeia as colunas do Excel para o formato do seu JSON
-        // O Excel deve ter cabeçalhos como: referencia, descricao, categoria, preco, cor, P, M, G...
-        const produtoFormatado = {
-          referencia: String(row.referencia || row.Referencia),
-          categoria: row.categoria || row.Categoria || 'CAMISA',
-          descricao: row.descricao || row.Descricao || '',
-          unidade: row.unidade || row.Unidade || 'UN',
-          imagem: `${row.referencia || row.Referencia}.jpeg`, // Assume o padrão da foto
-          variantes: [
-            {
-              cor_codigo_nome: row.cor || row.Cor || 'PADRÃO',
-              valor_unitario: Number(row.preco || row.Preco || 0),
-              grade: {
-                PP: Number(row.PP || 0),
-                P: Number(row.P || 0),
-                M: Number(row.M || 0),
-                G: Number(row.G || 0),
-                GG: Number(row.GG || 0),
-                U: Number(row.U || 0)
-              }
-            }
-          ]
+        const ref = String(row.Referencia || row.referencia);
+        
+        // 1. Prepara o objeto da variante com os novos preços
+        const novaVariante = {
+          cor_codigo_nome: String(row.Cor || row.cor || 'PADRÃO'),
+          valor_unitario: Number(row.Preco_Base || row.preco || 0),
+          valor_unitario_tb1: Number(row.Preco_TB1 || row.preco_tb1 || 0),
+          valor_unitario_tb2: Number(row.Preco_TB2 || row.preco_tb2 || 0),
+          valor_unitario_tb3: Number(row.Preco_TB3 || row.preco_tb3 || 0),
+          grade: {
+            PP: Number(row.PP || 0),
+            P: Number(row.P || 0),
+            M: Number(row.M || 0),
+            G: Number(row.G || 0),
+            GG: Number(row.GG || 0),
+            U: Number(row.U || 0)
+          }
         };
 
-        // Envia para o servidor
-        // Usamos JSON.stringify aqui. Como o import não envia arquivo físico de imagem na hora, 
-        // o backend vai salvar a referência e usar o nome padrão da imagem.
-        await fetch(API_URL, {
-          method: 'POST',
+        // Calcula os totais (quantidade e valores totais por tabela)
+        calcularTotaisVariante(novaVariante);
+
+        const produtoDados = {
+          referencia: ref,
+          categoria: (row.Categoria || row.categoria || 'CAMISA').toUpperCase(),
+          descricao: row.Descricao || row.descricao || '',
+          unidade: (row.Unidade || row.unidade || 'UN').toUpperCase(),
+          variantes: [novaVariante]
+        };
+
+        // 2. Lógica de Upsert (Verifica se existe localmente)
+        const existe = produtos.value.find(p => p.referencia === ref);
+        
+        const url = existe ? `${API_URL}/${ref}` : API_URL;
+        const method = existe ? 'PUT' : 'POST';
+
+        // 3. Envia para o servidor
+        // Nota: Enviamos como JSON comum, pois importação em massa geralmente não envia fotos novas
+        await fetch(url, {
+          method: method,
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(produtoFormatado)
+          body: JSON.stringify(produtoDados)
         });
       }
 
-      alert("Importação finalizada com sucesso!");
-      fetchProdutos(); // Atualiza a tabela
+      alert("Processamento de Excel concluído!");
+      fetchProdutos();
     } catch (error) {
       console.error("Erro na importação:", error);
-      alert("Erro ao processar o arquivo Excel. Verifique o formato das colunas.");
+      alert("Falha ao importar Excel. Verifique os nomes das colunas.");
     }
   };
   reader.readAsArrayBuffer(file);
@@ -155,8 +161,26 @@ const addVariante = () => {
     grade: { PP: 0, P: 0, M: 0, G: 0, GG: 0, U: 0 },
     quantidade_total: 0,
     valor_unitario: 0,
-    valor_total: 0
+    valor_total: 0,
+    // Novos campos
+    valor_unitario_tb1: 0,
+    valor_total_tb1: 0,
+    valor_unitario_tb2: 0,
+    valor_total_tb2: 0,
+    valor_unitario_tb3: 0,
+    valor_total_tb3: 0
   })
+}
+
+const calcularTotaisVariante = (v) => {
+  // 1. Soma a grade para ter o total de peças
+  v.quantidade_total = Object.values(v.grade).reduce((acc, curr) => acc + Number(curr), 0);
+  
+  // 2. Calcula os totais multiplicando o preço de cada tabela pela quantidade
+  v.valor_total = (Number(v.valor_unitario) || 0) * v.quantidade_total;
+  v.valor_total_tb1 = (Number(v.valor_unitario_tb1) || 0) * v.quantidade_total;
+  v.valor_total_tb2 = (Number(v.valor_unitario_tb2) || 0) * v.quantidade_total;
+  v.valor_total_tb3 = (Number(v.valor_unitario_tb3) || 0) * v.quantidade_total;
 }
 
 const saveProduto = async () => {
@@ -194,17 +218,34 @@ const deleteProduto = async (ref) => {
 }
 
 const exportToExcel = () => {
-  const data = produtos.value.map(p => ({
-    Referencia: p.referencia,
-    Descricao: p.descricao,
-    Categoria: p.categoria,
-    Preco: p.variantes[0]?.valor_unitario || 0
-  }))
-  const ws = XLSX.utils.json_to_sheet(data)
-  const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, ws, "Produtos")
-  XLSX.writeFile(wb, "estoque_tudo_passa.xlsx")
-}
+  const data = produtos.value.map(p => {
+    // Pegamos a primeira variante para exportar os dados principais
+    // Se o produto tiver múltiplas variantes, você pode adaptar para exportar várias linhas
+    const v = p.variantes[0] || {};
+    return {
+      Referencia: p.referencia,
+      Descricao: p.descricao,
+      Categoria: p.categoria,
+      Unidade: p.unidade,
+      Cor: v.cor_codigo_nome || '',
+      Preco_Base: v.valor_unitario || 0,
+      Preco_TB1: v.valor_unitario_tb1 || 0,
+      Preco_TB2: v.valor_unitario_tb2 || 0,
+      Preco_TB3: v.valor_unitario_tb3 || 0,
+      PP: v.grade?.PP || 0,
+      P: v.grade?.P || 0,
+      M: v.grade?.M || 0,
+      G: v.grade?.G || 0,
+      GG: v.grade?.GG || 0,
+      U: v.grade?.U || 0
+    };
+  });
+
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Produtos");
+  XLSX.writeFile(wb, "estoque_detalhado.xlsx");
+};
 
 onMounted(fetchProdutos)
 </script>
@@ -356,16 +397,44 @@ onMounted(fetchProdutos)
               <button @click="addVariante" class="text-indigo-600 flex items-center gap-1 text-xs font-bold hover:underline"><PlusCircle class="w-4 h-4" /> Add Variante</button>
             </div>
             <div class="space-y-4">
-              <div v-for="(v, idx) in form.variantes" :key="idx" class="p-6 bg-slate-50 rounded-3xl border border-slate-100 relative shadow-sm">
+              <div v-for="(v, idx) in form.variantes" :key="idx" class="p-6 bg-slate-50 rounded-3xl border border-slate-100 relative shadow-sm mb-4">
                 <button @click="form.variantes.splice(idx,1)" class="absolute top-4 right-4 text-red-300 hover:text-red-500"><Trash2 class="w-4 h-4" /></button>
-                <div class="grid grid-cols-4 gap-4 mb-4">
-                  <div class="col-span-2"><label class="text-[9px] font-bold text-slate-400 uppercase">Cor</label><input v-model="v.cor_codigo_nome" placeholder="Ex: 0007-PRETO" class="w-full p-2 bg-white border border-slate-200 rounded-xl text-sm font-bold uppercase"></div>
-                  <div><label class="text-[9px] font-bold text-slate-400 uppercase">R$ Unit.</label><input type="number" v-model="v.valor_unitario" class="w-full p-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-indigo-600"></div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                  <div class="md:col-span-2">
+                    <label class="text-[9px] font-bold text-slate-400 uppercase">Cor / Referência Cor</label>
+                    <input v-model="v.cor_codigo_nome" placeholder="Ex: PRETO" class="w-full p-2 bg-white border border-slate-200 rounded-xl text-sm font-bold uppercase">
+                  </div>
+                  <div>
+                    <label class="text-[9px] font-bold text-slate-400 uppercase">Preço Base (Unit)</label>
+                    <input type="number" v-model="v.valor_unitario" @input="calcularTotaisVariante(v)" class="w-full p-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-indigo-600">
+                  </div>
+                  <div>
+                    <label class="text-[9px] font-bold text-slate-400 uppercase">Total Qtd</label>
+                    <div class="w-full p-2 bg-slate-200/50 rounded-xl text-sm font-black text-slate-500 text-center">{{ v.quantidade_total }}</div>
+                  </div>
                 </div>
+
+                <!-- Nova Linha para as 3 Tabelas de Preço -->
+                <div class="grid grid-cols-3 gap-3 mb-4 p-3 bg-white/50 rounded-2xl border border-dashed border-slate-200">
+                  <div>
+                    <label class="text-[9px] font-bold text-emerald-600 uppercase">Preço TB 1</label>
+                    <input type="number" v-model="v.valor_unitario_tb1" @input="calcularTotaisVariante(v)" class="w-full p-2 bg-white border border-emerald-100 rounded-xl text-sm font-bold">
+                  </div>
+                  <div>
+                    <label class="text-[9px] font-bold text-blue-600 uppercase">Preço TB 2</label>
+                    <input type="number" v-model="v.valor_unitario_tb2" @input="calcularTotaisVariante(v)" class="w-full p-2 bg-white border border-blue-100 rounded-xl text-sm font-bold">
+                  </div>
+                  <div>
+                    <label class="text-[9px] font-bold text-purple-600 uppercase">Preço TB 3</label>
+                    <input type="number" v-model="v.valor_unitario_tb3" @input="calcularTotaisVariante(v)" class="w-full p-2 bg-white border border-purple-100 rounded-xl text-sm font-bold">
+                  </div>
+                </div>
+
                 <div class="grid grid-cols-6 gap-2">
                   <div v-for="size in ['PP','P','M','G','GG','U']" :key="size" class="text-center">
                     <label class="text-[9px] font-bold text-slate-400">{{ size }}</label>
-                    <input type="number" v-model="v.grade[size]" class="w-full p-2 bg-white border border-slate-200 rounded-xl text-xs text-center font-bold">
+                    <input type="number" v-model="v.grade[size]" @input="calcularTotaisVariante(v)" class="w-full p-2 bg-white border border-slate-200 rounded-xl text-xs text-center font-bold">
                   </div>
                 </div>
               </div>

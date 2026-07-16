@@ -39,23 +39,6 @@ const shippingValue = ref(0)
 const calculatingShipping = ref(false)
 const pixData = ref(null)
 
-// No Tracking do Cliente
-const trackingData = ref(null)
-
-const atualizarMapa = async () => {
-    const res = await fetch(`http://localhost:3000/logistica/rastreio/${pedidoId}`)
-    trackingData.value = await res.json()
-    
-    // Se profissional aceitou, atualiza o marcador dele no mapa
-    if(trackingData.value.posicao_atual.lat) {
-        markerProfissional.setLngLat([
-            trackingData.value.posicao_atual.lng, 
-            trackingData.value.posicao_atual.lat
-        ])
-    }
-}
-setInterval(atualizarMapa, 5000) 
-
 // --- NOVOS ESTADOS (LOGÍSTICA) ---
 const allProfessionals = ref([])
 const selectedCarrier = ref('') 
@@ -247,63 +230,32 @@ const handlePayment = async () => {
     alert("Preencha seus dados e aguarde o cálculo do frete!")
     return
   }
-  
   try {
-    // 1. Salva/Atualiza o cliente no banco
     await saveCustomerToDB()
-
-    // 2. Gera o pagamento Pix (conforme seu código original)
-    const pixRes = await fetch(`${API_URL}/produtos/checkout/pix`, {
+    const res = await fetch(`${API_URL}/produtos/checkout/pix`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         nome: customer.value.nome,
         email: customer.value.email,
         cpf: String(customer.value.cpf || '').replace(/\D/g, ''), 
-        valor: totalFinal.value
+        valor: subtotalCart.value + shippingValue.value
       })
     })
-    const dataPix = await pixRes.json()
-
-    if (dataPix.success) {
-      pixData.value = dataPix
-
-      // 3. NOVO: Salva o Pedido de Venda no Banco de Dados
-      const pedidoPayload = {
-        cliente: customer.value,
-        itens: cart.value,
-        subtotal: subtotalCart.value,
-        frete: shippingValue.value,
-        total: totalFinal.value,
-        transportadora: selectedCarrier.value,
-        observacoes: orderNotes.value,
-        pixData: dataPix // Salva os dados do pix gerado dentro do pedido
-      }
-
-      const pedidoRes = await fetch(`${API_URL}/pedidos`, {
+    const data = await res.json()
+    if (data.success) {
+      pixData.value = data
+      await fetch(`${API_URL}/produtos/notificar-pedido`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(pedidoPayload)
-      })
-
-      if (pedidoRes.ok) {
-        console.log("Pedido salvo com sucesso no banco de dados!")
-        
-        // 4. Notifica por email (conforme seu código original)
-        await fetch(`${API_URL}/produtos/notificar-pedido`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(pedidoPayload)
+        body: JSON.stringify({
+          cliente: customer.value, itens: cart.value,
+          total: subtotalCart.value + shippingValue.value, frete: shippingValue.value,
+          transportadora: selectedCarrier.value, observacoes: orderNotes.value
         })
-      }
-
-    } else { 
-      alert("Erro ao gerar Pix: " + dataPix.error) 
-    }
-  } catch (e) { 
-    console.error(e)
-    alert("Erro de conexão com o servidor.") 
-  }
+      })
+    } else { alert("Erro: " + data.error) }
+  } catch (e) { alert("Erro de conexão com o servidor.") }
 }
 
 // --- LÓGICA DO PRODUTO E CARRINHO ---
@@ -377,20 +329,9 @@ const initMap = () => {
   }, 500)
 }
 
-// const finishAndTrack = () => {
-//   currentStep.value = 'tracking'; cart.value = []; localStorage.removeItem('gp_cart');
-//   nextTick(() => initMap())
-// }
-
-const finishAndTrack = () => {
-  // Se o pixData foi gerado, temos o ID do pedido
-  if (pixData.value && pixData.value.pedidoId) {
-     // Redireciona para a nova página de Tracking passando o ID
-     router.push(`/tracking/${pixData.value.pedidoId}`);
-  } else {
-     // Caso de fallback (se o ID não vier no pixData, buscar o último do cart)
-     currentStep.value = 'home';
-  }
+const finishAndTrack = () => { 
+  currentStep.value = 'tracking'; cart.value = []; localStorage.removeItem('gp_cart'); 
+  nextTick(() => initMap()) 
 }
 
 onMounted(() => {
@@ -624,7 +565,7 @@ watch([allCustomers, currentUser], () => syncUserWithCustomer(), { immediate: tr
             <button @click="showLoginModal = true" class="bg-white text-amber-600 py-3 rounded-xl text-[10px] font-black uppercase shadow-sm">Entrar</button>
             <button @click="showRegisterWizard = true" class="bg-amber-600 text-white py-3 rounded-xl text-[10px] font-black uppercase">Cadastrar-se</button>
         </div>
-        <button @click="currentUser = null" class="w-full mt-4 text-[9px] font-black text-amber-400 uppercase underline">Ou Continuar como visitante preenchendo os campos abaixo</button>
+        <button @click="currentUser = null" class="w-full mt-4 text-[9px] font-black text-amber-400 uppercase underline">Continuar como visitante</button>
     </div>
 
     <div v-else class="bg-emerald-50 border-2 border-emerald-100 p-4 rounded-2xl mb-8 flex items-center gap-3">
@@ -702,7 +643,7 @@ watch([allCustomers, currentUser], () => syncUserWithCustomer(), { immediate: tr
         <div class="relative">
             <select v-model="selectedCarrier" 
                     class="w-full p-5 bg-white rounded-2xl shadow-sm outline-none font-bold text-sm border border-slate-50 appearance-none focus:ring-2 ring-indigo-500/20 transition-all">
-                <option value="" disabled>Excursão</option>
+                <option value="" disabled>Selecione a Transportadora</option>
                 <option v-for="c in carriers" :key="c.codigo" :value="c.nome">
                     {{ c.nome }}
                 </option>

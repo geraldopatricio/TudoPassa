@@ -1,7 +1,5 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import Sidebar from '../components/Sidebar.vue'
-import NavBar from '../components/NavBar.vue'
 import Footer from '../components/Footer.vue'
 import { 
   Search, Trash2, Plus, Minus, ChevronDown, UserPlus, CreditCard, X, Save,
@@ -11,7 +9,6 @@ import {
 
 // --- CONFIGURAÇÃO DA API ---
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000' // Altere para sua URL se necessário
-
 
 const isSidebarOpen = ref(false)
 const viewType = ref('grid') 
@@ -128,7 +125,7 @@ const fetchProducts = async () => {
         name: p.descricao, // substitui name por descricao
         price: p.variantes?.[0]?.valor_unitario || 0, // busca valor da primeira variante
         code: p.referencia, // substitui code por referencia
-        image: p.imagem ? `${API_URL}/uploads/${p.imagem}` : '/assets/img/placeholder.png',
+        image: p.imagem ? `${API_URL}/uploads/produtos/${p.imagem}` : '/assets/img/placeholder.png',
         discount: 0
       }))
     }
