@@ -8,7 +8,7 @@ const router = useRouter()
 
 // Configurações
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
+const BASE_URL = import.meta.env.VITE_API_URL || '/api'
 const pedidoId = route.params.id
 
 const entrega = ref(null)

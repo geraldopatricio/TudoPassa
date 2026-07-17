@@ -7,7 +7,7 @@ import {
 } from 'lucide-vue-next'
 import * as XLSX from 'xlsx'
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const BASE_URL = import.meta.env.VITE_API_URL || '/api';
 const API_URL = `${BASE_URL}/profissionais`;
 const CLIENTES_API = `${BASE_URL}/clientes`;
 const PRODUTOS_API = `${BASE_URL}/produtos`;

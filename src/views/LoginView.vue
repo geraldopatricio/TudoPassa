@@ -5,7 +5,7 @@ import axios from 'axios'
 import { useRouter } from 'vue-router'
 
 const router = useRouter()
-const API_URL = 'http://localhost:3000' 
+const API_URL = '/api' 
 
 // Estados de Interface
 const isAppReady = ref(false)

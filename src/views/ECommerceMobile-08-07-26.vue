@@ -7,7 +7,7 @@ import {
 } from 'lucide-vue-next'
 
 // --- CONFIGURAÇÃO ---
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
+const API_URL = import.meta.env.VITE_API_URL || '/api'
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN
 const IMAGE_BASE = `${API_URL}/uploads/produtos`
 

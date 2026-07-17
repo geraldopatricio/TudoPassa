@@ -43,7 +43,7 @@ onMounted(() => {
   if (['/usuarios'].includes(route.path)) openMenus.value.admin = true
 })
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
 const usuarioLogado = ref({
   login: 'Usuário',

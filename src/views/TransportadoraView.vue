@@ -19,7 +19,7 @@ const abrirNavegacao = () => {
 const mudarStatusEntrega = async (novoStatus) => {
   try {
     const id = minhaEntregaAtiva.value.id;
-    const res = await fetch(`http://localhost:3000/logistica/status/${id}`, {
+    const res = await fetch(`/api/logistica/status/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: novoStatus })
@@ -44,7 +44,7 @@ const mudarStatusEntrega = async (novoStatus) => {
 };
 
 const fetchEntregas = async () => {
-    const res = await fetch('http://localhost:3000/logistica/disponiveis')
+    const res = await fetch('/api/logistica/disponiveis')
     const data = await res.json()
     if (data.length > entregasDisponiveis.value.length) {
         new Audio('/sounds/alert.mp3').play().catch(() => {});
@@ -53,7 +53,7 @@ const fetchEntregas = async () => {
 }
 
 const aceitarServico = async (id) => {
-    const res = await fetch(`http://localhost:3000/logistica/aceitar/${id}`, {
+    const res = await fetch(`/api/logistica/aceitar/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ profissionalId: profissionalLogadoId })
@@ -69,7 +69,7 @@ const iniciarRastreioGPS = () => {
     setInterval(() => {
         // No mundo real: navigator.geolocation.getCurrentPosition
         const pos = { lat: -3.73 + Math.random()*0.01, lng: -38.52 + Math.random()*0.01 }
-        fetch('http://localhost:3000/logistica/rastreio/posicao', {
+        fetch('/api/logistica/rastreio/posicao', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ profissionalId: profissionalLogadoId, ...pos })

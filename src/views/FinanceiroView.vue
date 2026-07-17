@@ -5,7 +5,7 @@ import {
   Calendar, Trash2, CheckCircle2, Loader2 
 } from 'lucide-vue-next'
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const BASE_URL = import.meta.env.VITE_API_URL || '/api';
 const financeiro = ref([])
 const loading = ref(true)
 const searchQuery = ref('')

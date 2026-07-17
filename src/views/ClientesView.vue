@@ -8,7 +8,7 @@ import {
 import * as XLSX from 'xlsx'
 
 // 1. Configurações de API
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const BASE_URL = import.meta.env.VITE_API_URL || '/api';
 const API_URL = `${BASE_URL}/clientes`;
 const PROFISSIONAIS_API = `${BASE_URL}/profissionais`;
 const USUARIOS_API = `${BASE_URL}/usuarios`;

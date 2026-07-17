@@ -7,7 +7,7 @@ import {
 } from 'lucide-vue-next'
 
 // --- CONFIGURAÇÃO ---
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
+const API_URL = import.meta.env.VITE_API_URL || '/api'
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN
 const IMAGE_BASE = `${API_URL}/uploads/produtos`
 
@@ -43,7 +43,7 @@ const pixData = ref(null)
 const trackingData = ref(null)
 
 const atualizarMapa = async () => {
-    const res = await fetch(`http://localhost:3000/logistica/rastreio/${pedidoId}`)
+    const res = await fetch(`/api/logistica/rastreio/${pedidoId}`)
     trackingData.value = await res.json()
     
     // Se profissional aceitou, atualiza o marcador dele no mapa

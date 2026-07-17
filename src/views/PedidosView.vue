@@ -9,7 +9,7 @@ import {
 const usuarioLogado = JSON.parse(localStorage.getItem('usuario') || '{}')
 
 // --- CONFIGURAÇÕES DE CONEXÃO ---
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const BASE_URL = import.meta.env.VITE_API_URL || '/api';
 const API_URL = `${BASE_URL}/pedidos`;
 const IMAGE_BASE = `${BASE_URL}/uploads/produtos`;
 

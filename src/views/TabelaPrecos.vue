@@ -2,7 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { Search, Plus, Pencil, Trash2, X, Save, Calendar, Tag, CheckCircle2 } from 'lucide-vue-next'
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const BASE_URL = import.meta.env.VITE_API_URL || '/api';
 const API_URL = `${BASE_URL}/tabela-precos`;
 
 const tabelas = ref([])

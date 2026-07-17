@@ -8,7 +8,7 @@ import {
 } from 'lucide-vue-next'
 
 // --- CONFIGURAÇÃO DA API ---
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000' // Altere para sua URL se necessário
+const API_URL = import.meta.env.VITE_API_URL || '/api' // Altere para sua URL se necessário
 
 const isSidebarOpen = ref(false)
 const viewType = ref('grid') 

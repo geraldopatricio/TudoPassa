@@ -2,7 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { Truck, MapPin, Search, Filter, ArrowUpRight, Activity } from 'lucide-vue-next'
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
+const BASE_URL = import.meta.env.VITE_API_URL || '/api'
 const entregas = ref([])
 const loading = ref(true)
 const searchQuery = ref('')
