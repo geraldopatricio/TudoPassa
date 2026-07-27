@@ -5,7 +5,7 @@ import axios from 'axios'
 import { useRouter } from 'vue-router'
 
 const router = useRouter()
-const API_URL = '/api' 
+const API_URL = import.meta.env.VITE_API_URL
 
 // Estados de Interface
 const isAppReady = ref(false)

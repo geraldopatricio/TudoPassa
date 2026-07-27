@@ -1,5 +1,6 @@
 <script setup>
-import { ref, computed, onMounted, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, nextTick, watch, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { 
   Search, ShoppingBag, Heart, ChevronLeft, Star, 
   MapPin, QrCode, Truck, CheckCircle2, X, Plus, Minus,
@@ -41,25 +42,29 @@ const pixData = ref(null)
 
 // No Tracking do Cliente
 const trackingData = ref(null)
-
-const atualizarMapa = async () => {
-    const res = await fetch(`/api/logistica/rastreio/${pedidoId}`)
-    trackingData.value = await res.json()
-    
-    // Se profissional aceitou, atualiza o marcador dele no mapa
-    if(trackingData.value.posicao_atual.lat) {
-        markerProfissional.setLngLat([
-            trackingData.value.posicao_atual.lng, 
-            trackingData.value.posicao_atual.lat
-        ])
-    }
-}
-setInterval(atualizarMapa, 5000) 
+const trackingSteps = [
+  'Pagamento Aprovado',
+  'Preparando Envio',
+  'Saiu para Entrega',
+  'Tentativa de Entrega',
+  'Pedido Entregue',
+  'Recebido pelo Cliente'
+]
+const currentTrackingStepIndex = computed(() => {
+  const status = trackingData.value?.status || 'Pagamento Aprovado'
+  const idx = trackingSteps.findIndex(step => step.toLowerCase() === status.toLowerCase())
+  return idx === -1 ? 0 : idx
+})
+const router = useRouter()
 
 // --- NOVOS ESTADOS (LOGÍSTICA) ---
 const allProfessionals = ref([])
 const selectedCarrier = ref('') 
-const orderNotes = ref('')     
+const orderNotes = ref('')    
+const selectedCarrierName = computed(() => {
+  const prof = allProfessionals.value.find(p => p.codigo === selectedCarrier.value)
+  return prof?.nome || ''
+})
 
 // --- NOVOS ESTADOS DE AUTENTICAÇÃO ---
 const currentUser = ref(JSON.parse(localStorage.getItem('gp_user') || 'null'))
@@ -267,6 +272,7 @@ const handlePayment = async () => {
 
     if (dataPix.success) {
       pixData.value = dataPix
+      trackingData.value = { status: 'Pagamento Aprovado' }
 
       // 3. NOVO: Salva o Pedido de Venda no Banco de Dados
       const pedidoPayload = {
@@ -275,7 +281,12 @@ const handlePayment = async () => {
         subtotal: subtotalCart.value,
         frete: shippingValue.value,
         total: totalFinal.value,
-        transportadora: selectedCarrier.value,
+        transportadora: selectedCarrierName.value || selectedCarrier.value,
+        transportadoraCodigo: selectedCarrier.value,
+        // "Excursão" é o vínculo do pedido com o cadastro da transportadora.
+        // Mantemos os campos de transportadora para pedidos e integrações legadas.
+        excursao: selectedCarrierName.value || selectedCarrier.value,
+        excursaoCodigo: selectedCarrier.value,
         observacoes: orderNotes.value,
         pixData: dataPix // Salva os dados do pix gerado dentro do pedido
       }
@@ -287,6 +298,10 @@ const handlePayment = async () => {
       })
 
       if (pedidoRes.ok) {
+        const pedidoJson = await pedidoRes.json()
+        if (pedidoJson.success && pedidoJson.pedido?.id) {
+          pixData.value.pedidoId = pedidoJson.pedido.id
+        }
         console.log("Pedido salvo com sucesso no banco de dados!")
         
         // 4. Notifica por email (conforme seu código original)
@@ -382,16 +397,136 @@ const initMap = () => {
 //   nextTick(() => initMap())
 // }
 
-const finishAndTrack = () => {
-  // Se o pixData foi gerado, temos o ID do pedido
+const finishAndTrack = async () => {
   if (pixData.value && pixData.value.pedidoId) {
-     // Redireciona para a nova página de Tracking passando o ID
-     router.push(`/tracking/${pixData.value.pedidoId}`);
+    try {
+      await fetch(`${API_URL}/pedidos/${pixData.value.pedidoId}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'Pago' })
+      })
+    } catch (e) {
+      console.error('Erro ao confirmar pagamento:', e)
+    }
+
+    router.push(`/tracking/${pixData.value.pedidoId}`)
   } else {
-     // Caso de fallback (se o ID não vier no pixData, buscar o último do cart)
-     currentStep.value = 'home';
+    alert('Não foi possível abrir o rastreamento. Tente novamente mais tarde.')
   }
 }
+
+const goToTracking = () => {
+  if (pixData.value && pixData.value.pedidoId) {
+    router.push(`/tracking/${pixData.value.pedidoId}`)
+  } else {
+    alert('Nenhum pedido pago disponível para rastrear no momento.')
+  }
+}
+
+// --- NOVA LÓGICA: copiar o Pix (copia e cola) ---
+const copyPix = async () => {
+  try {
+    const text = pixData.value?.copyPaste || ''
+    if (!text) return alert('Texto do PIX não disponível')
+    await navigator.clipboard.writeText(text)
+    alert('Código PIX copiado para a área de transferência')
+  } catch (e) { console.error(e); alert('Não foi possível copiar') }
+}
+
+// --- TRACKING SIMULADO (MOCK) ---
+let trackingMap = null
+let driverMarker = null
+let driverAnimInterval = null
+
+const geocodeAddress = async (address) => {
+  if (!MAPBOX_TOKEN) return null
+  try {
+    const q = encodeURIComponent(address)
+    const res = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${q}.json?access_token=${MAPBOX_TOKEN}&limit=1`)
+    const data = await res.json()
+    if (data?.features && data.features.length) return data.features[0].center // [lng, lat]
+  } catch (e) { console.error('Geocode failed', e) }
+  return null
+}
+
+const initTrackingMap = async () => {
+  if (!window.mapboxgl) return
+  // limpar instâncias antigas
+  if (driverAnimInterval) { clearInterval(driverAnimInterval); driverAnimInterval = null }
+  if (trackingMap) { try { trackingMap.remove() } catch(e){} trackingMap = null }
+
+  mapboxgl.accessToken = MAPBOX_TOKEN
+  trackingMap = new mapboxgl.Map({ container: 'map', style: 'mapbox://styles/mapbox/streets-v12', center: [-38.5267, -3.7319], zoom: 14 })
+  trackingMap.on('load', () => trackingMap.resize())
+
+  // origem (simulada) e destino (tentar geocodificar o endereço do cliente)
+  const origin = [-38.5267, -3.7319]
+  let dest = null
+  if (customer.value?.endereco) dest = await geocodeAddress(customer.value.endereco)
+  if (!dest) {
+    // fallback: pequena variação aleatória
+    dest = [origin[0] + (Math.random() - 0.5) * 0.02, origin[1] + (Math.random() - 0.5) * 0.02]
+  }
+
+  // adiciona marcador do cliente
+  new mapboxgl.Marker({ color: '#10b981' }).setLngLat(dest).addTo(trackingMap)
+
+  // cria o marcador do motorista com ícone de moto (SVG)
+  const el = document.createElement('div')
+  el.className = 'driver-marker'
+  el.innerHTML = `
+    <img src="/assets/img/motoboy.png" alt="motoboy" style="width:48px;height:48px;display:block;" />
+  `
+  driverMarker = new mapboxgl.Marker({ element: el, anchor: 'center' }).setLngLat(origin).addTo(trackingMap)
+
+  // anima do origin ao dest com rotação baseada no bearing
+  const steps = 200
+  let step = 0
+  let prevLng = origin[0], prevLat = origin[1]
+  const toLng = dest[0], toLat = dest[1]
+
+  const calculateBearing = (lng1, lat1, lng2, lat2) => {
+    const toRad = Math.PI / 180
+    const toDeg = 180 / Math.PI
+    const φ1 = lat1 * toRad
+    const φ2 = lat2 * toRad
+    const λ1 = lng1 * toRad
+    const λ2 = lng2 * toRad
+    const y = Math.sin(λ2 - λ1) * Math.cos(φ2)
+    const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(λ2 - λ1)
+    const θ = Math.atan2(y, x)
+    return (θ * toDeg + 360) % 360
+  }
+
+  driverAnimInterval = setInterval(() => {
+    step++
+    const t = Math.min(1, step / steps)
+    const curLng = origin[0] + (toLng - origin[0]) * t
+    const curLat = origin[1] + (toLat - origin[1]) * t
+
+    try {
+      driverMarker.setLngLat([curLng, curLat])
+      // calcula bearing entre previous e atual
+      const bearing = calculateBearing(prevLng, prevLat, curLng, curLat)
+      const elNode = driverMarker.getElement()
+      if (elNode) elNode.style.transform = `translate(-50%, -50%) rotate(${bearing}deg)`
+      prevLng = curLng; prevLat = curLat
+    } catch (e) { console.error(e) }
+
+    // quando chega, limpa intervalo
+    if (t >= 1) { clearInterval(driverAnimInterval); driverAnimInterval = null }
+  }, 60)
+}
+
+// Ao entrar na tela de tracking, aguarda 3s e inicia o mapa simulado
+watch(currentStep, (v) => {
+  if (v === 'tracking') {
+    setTimeout(() => initTrackingMap(), 3000)
+  } else {
+    // limpar animação se sair da tela
+    if (driverAnimInterval) { clearInterval(driverAnimInterval); driverAnimInterval = null }
+  }
+})
 
 onMounted(() => {
   fetchProducts()
@@ -703,7 +838,7 @@ watch([allCustomers, currentUser], () => syncUserWithCustomer(), { immediate: tr
             <select v-model="selectedCarrier" 
                     class="w-full p-5 bg-white rounded-2xl shadow-sm outline-none font-bold text-sm border border-slate-50 appearance-none focus:ring-2 ring-indigo-500/20 transition-all">
                 <option value="" disabled>Excursão</option>
-                <option v-for="c in carriers" :key="c.codigo" :value="c.nome">
+                <option v-for="c in carriers" :key="c.codigo" :value="c.codigo">
                     {{ c.nome }}
                 </option>
             </select>
@@ -729,11 +864,18 @@ watch([allCustomers, currentUser], () => syncUserWithCustomer(), { immediate: tr
         
         <!-- Se PIX Gerado -->
         <div v-if="pixData" class="bg-white p-6 rounded-3xl text-center mb-6 animate-in zoom-in">
-            <p class="text-slate-400 font-black text-[9px] uppercase mb-4">Escaneie o QR Code abaixo</p>
-            <img :src="`data:image/png;base64,${pixData.qrCode}`" class="w-48 mx-auto mb-4 rounded-xl shadow-md border-4 border-slate-50">
-            <button @click="finishAndTrack" class="w-full bg-emerald-500 text-white py-4 rounded-xl font-black uppercase text-xs shadow-lg shadow-emerald-200">
-                JÁ PAGUEI, VERIFICAR
-            </button>
+          <p class="text-slate-400 font-black text-[9px] uppercase mb-4">Escaneie o QR Code abaixo</p>
+          <img :src="`data:image/png;base64,${pixData.qrCode}`" class="w-48 mx-auto mb-4 rounded-xl shadow-md border-4 border-slate-50">
+
+          <!-- Copia e cola do PIX -->
+          <div class="mt-2 bg-slate-50 p-3 rounded-xl border border-slate-100 text-xs font-mono text-slate-700 flex items-center justify-between gap-3">
+            <div class="truncate text-left mr-2">{{ pixData.copyPaste }}</div>
+            <button @click="copyPix" class="ml-2 bg-indigo-600 text-white px-3 py-2 rounded-xl text-[11px] font-black">Copiar</button>
+          </div>
+
+          <button @click="finishAndTrack" class="w-full mt-4 bg-emerald-500 text-white py-4 rounded-xl font-black uppercase text-xs shadow-lg shadow-emerald-200">
+            JÁ PAGUEI, VERIFICAR
+          </button>
         </div>
 
         <!-- Botão Gerar -->
@@ -755,15 +897,34 @@ watch([allCustomers, currentUser], () => syncUserWithCustomer(), { immediate: tr
             <h2 class="font-black text-2xl text-slate-900">Pedido Confirmado!</h2>
         </div>
 
-        <div class="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 mb-8 space-y-8 relative">
-            <div class="absolute left-10 top-12 bottom-12 w-0.5 bg-slate-100"></div>
-            <div class="relative flex items-center gap-6">
-                <div class="z-10 w-5 h-5 rounded-full bg-emerald-500 border-4 border-white shadow-md"></div>
-                <h4 class="font-black text-slate-900 uppercase text-[10px]">Pagamento Aprovado</h4>
+        <div class="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 mb-8">
+            <div class="flex items-center justify-between mb-6">
+                <div>
+                    <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Progresso do Pedido</p>
+                    <h3 class="font-black text-slate-900 text-lg uppercase tracking-tight">Pedido confirmado!</h3>
+                </div>
+                <span class="text-[10px] font-black uppercase tracking-widest text-indigo-600">Motoboy em rota</span>
             </div>
-            <div class="relative flex items-center gap-6">
-                <div class="z-10 w-5 h-5 rounded-full bg-indigo-600 border-4 border-white shadow-md animate-pulse"></div>
-                <h4 class="font-black text-slate-900 uppercase text-[10px]">Preparando Envio</h4>
+
+            <div class="space-y-6">
+                <div v-for="(step, idx) in trackingSteps" :key="step" class="flex gap-4">
+                    <div class="flex flex-col items-center">
+                        <div :class="[
+                            'w-10 h-10 rounded-full flex items-center justify-center text-[11px] font-black transition-all',
+                            idx <= currentTrackingStepIndex ? 'bg-indigo-600 text-white border border-indigo-700' : 'bg-slate-100 text-slate-400 border border-slate-200'
+                        ]">
+                            {{ idx + 1 }}
+                        </div>
+                        <div v-if="idx < trackingSteps.length - 1" :class="[
+                            'w-px flex-1 mt-2',
+                            idx < currentTrackingStepIndex ? 'bg-indigo-200' : 'bg-slate-200'
+                        ]"></div>
+                    </div>
+                    <div class="flex-1 pt-1">
+                        <p :class="['font-black uppercase text-xs tracking-widest', idx <= currentTrackingStepIndex ? 'text-slate-900' : 'text-slate-400']">{{ step }}</p>
+                        <p v-if="idx === currentTrackingStepIndex" class="text-[10px] text-indigo-600 uppercase mt-1">Em andamento</p>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -807,7 +968,7 @@ watch([allCustomers, currentUser], () => syncUserWithCustomer(), { immediate: tr
             <Truck class="w-6 h-6" />
         </button>
         
-        <button @click="currentStep = 'tracking'" :class="currentStep === 'tracking' ? 'text-indigo-600' : 'text-slate-300'">
+        <button @click="goToTracking" class="text-slate-300">
             <MapPin class="w-6 h-6" />
         </button>
     </nav>
@@ -924,4 +1085,6 @@ watch([allCustomers, currentUser], () => syncUserWithCustomer(), { immediate: tr
 .zoom-in { animation-name: zoomIn; }
 ::-webkit-scrollbar { display: none; }
 #map { border-radius: 3rem; }
+.driver-marker{ transform: translate(-50%, -50%); filter: drop-shadow(0 4px 6px rgba(0,0,0,0.15)); transition: transform 300ms linear; }
+.driver-marker img{ width:48px; height:48px; display:block }
 </style>

@@ -10,8 +10,8 @@ const isMobileOpen = ref(false)
 
 // Não mostra menu na tela de Login
 const showLayout = computed(() => {
-  const publicRoutes = ['/', '/login', '/ecommerce'] 
-  return !publicRoutes.includes(route.path)
+  const publicRoutes = ['/', '/login', '/ecommerce']
+  return !publicRoutes.includes(route.path) && !route.path.startsWith('/tracking')
 })
 
 const handleToggleSidebar = () => {
