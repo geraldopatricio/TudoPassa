@@ -1,0 +1,23 @@
+name: Deploy Frontend Automático
+
+on:
+  push:
+    branches: [ main ] # Toda vez que você der push na main, ele faz o deploy
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Executar comandos no servidor via SSH
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.SSH_HOST }}   # O IP que você configurou nos Secrets
+          username: ${{ secrets.SSH_USER }} # O usuário (root)
+          key: ${{ secrets.SSH_KEY }}       # A chave SSH que você colou nos Secrets
+          script: |
+            cd /var/www/TudoPassa/TudoPassa
+            git config --global safe.directory '*'
+            git fetch origin main
+            git reset --hard origin/main
+            npm install
+            npm run build
