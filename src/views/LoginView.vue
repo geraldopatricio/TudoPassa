@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted, reactive } from 'vue'
-import { Eye, EyeOff, Lock, UserPlus, X, Camera, Send, Loader2, Mail, KeyRound, CheckCircle2 } from 'lucide-vue-next'
+import { Eye, EyeOff, Lock, UserPlus, X, Camera, Send, Loader2, Mail, KeyRound, CheckCircle2, Download } from 'lucide-vue-next'
 import axios from 'axios'
 import { useRouter } from 'vue-router'
 
@@ -199,6 +199,21 @@ const recuperarSenha = async () => {
               <p class="text-sm text-slate-500">Novo por aqui? <button @click="modalRegistro = true" class="text-indigo-600 font-bold hover:underline">Criar conta</button></p>
               <button @click="modalMudarSenha = true" class="text-xs text-slate-400 hover:text-indigo-600 italic transition-colors">Mudar senha de acesso</button>
             </div>
+
+            <a
+              href="/downloads/tudo-passa.apk"
+              download="Tudo-Passa.apk"
+              class="group mt-6 flex items-center gap-3 rounded-2xl border border-indigo-100 bg-gradient-to-r from-indigo-50 to-white p-4 text-left transition-all hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-lg hover:shadow-indigo-100/70 focus:outline-none focus:ring-4 focus:ring-indigo-500/15"
+            >
+              <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-md shadow-indigo-200 transition-transform group-hover:scale-105">
+                <Download class="h-5 w-5" />
+              </span>
+              <span class="min-w-0 flex-1">
+                <span class="block text-sm font-bold text-slate-800">Baixe o app para Android</span>
+                <span class="mt-0.5 block text-xs text-slate-500">Instale o Tudo Passa no seu celular</span>
+              </span>
+              <span class="text-xs font-bold text-indigo-600 transition-transform group-hover:translate-x-0.5">APK</span>
+            </a>
           </div>
         </div>
       </div>

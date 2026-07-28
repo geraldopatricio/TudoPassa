@@ -1,0 +1,12 @@
+{
+  "appId": "br.com.tudopassa.ecommerce",
+  "appName": "Tudo Passa",
+  "webDir": "dist",
+  "server": {
+    "url": "https://tudopassa.lookrapido.com.br/ecommerce",
+    "cleartext": false,
+    "allowNavigation": [
+      "tudopassa.lookrapido.com.br"
+    ]
+  }
+}

@@ -9,7 +9,9 @@
   "scripts": {
     "dev": "vite --port 5174",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "android:sync": "npm run build && npx cap sync android",
+    "android:apk": "npm run android:sync && cd android && gradlew.bat assembleDebug"
   },
   "dependencies": {
     "@tailwindcss/postcss": "^4.1.18",
@@ -21,6 +23,10 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@capacitor/android": "^8.4.2",
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^7.6.8",
+    "@capacitor/core": "^8.4.2",
     "@vitejs/plugin-vue": "^6.0.3",
     "autoprefixer": "^10.4.23",
     "postcss": "^8.5.6",
