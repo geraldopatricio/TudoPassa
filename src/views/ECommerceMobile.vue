@@ -68,6 +68,7 @@ const selectedCarrierName = computed(() => {
 
 // --- NOVOS ESTADOS DE AUTENTICAÇÃO ---
 const currentUser = ref(JSON.parse(localStorage.getItem('gp_user') || 'null'))
+const isLoggedIn = computed(() => Boolean(currentUser.value))
 const showLoginModal = ref(false)
 const authMode = ref('login') 
 const loginForm = ref({ login: '', senha: '' })
@@ -605,7 +606,8 @@ watch([allCustomers, currentUser], () => syncUserWithCustomer(), { immediate: tr
               <span class="text-[8px] font-black text-indigo-500 uppercase block mb-1">{{ p.categoria }}</span>
               <h3 class="font-bold text-xs text-slate-800 line-clamp-2 h-8 leading-tight mb-2 uppercase">{{ p.descricao }}</h3>
               <div class="flex items-center justify-between mt-4">
-                <p class="text-lg font-black text-slate-900">R$ {{ p.variantes?.[0]?.valor_unitario?.toFixed(2) }}</p>
+                <p v-if="isLoggedIn" class="text-lg font-black text-slate-900">R$ {{ p.variantes?.[0]?.valor_unitario?.toFixed(2) }}</p>
+                <button v-else @click.stop="showLoginModal = true" class="text-[10px] font-black uppercase text-indigo-600">Entre para ver o preço</button>
                 <div class="w-8 h-8 bg-slate-900 rounded-full flex items-center justify-center text-white">
                   <Plus class="w-4 h-4" />
                 </div>
@@ -636,7 +638,8 @@ watch([allCustomers, currentUser], () => syncUserWithCustomer(), { immediate: tr
         <div class="w-16 h-1.5 bg-slate-100 rounded-full mx-auto mb-10"></div>
         
         <h2 class="text-2xl font-black text-slate-900 leading-tight uppercase mb-2">{{ selectedProduct.descricao }}</h2>
-        <p class="text-4xl font-black text-indigo-600 italic mb-10">R$ {{ selectedProduct.variantes?.[0]?.valor_unitario?.toFixed(2) }}</p>
+        <p v-if="isLoggedIn" class="text-4xl font-black text-indigo-600 italic mb-10">R$ {{ selectedProduct.variantes?.[0]?.valor_unitario?.toFixed(2) }}</p>
+        <button v-else @click="showLoginModal = true" class="mb-10 text-xs font-black uppercase text-indigo-600">Entre para ver o preço</button>
 
         <!-- TOGGLE MODO GRADE -->
         <div v-if="hasMultipleSizes" class="flex items-center justify-between bg-indigo-50 p-6 rounded-[2.5rem] mb-10 border border-indigo-100 shadow-sm">
@@ -727,7 +730,7 @@ watch([allCustomers, currentUser], () => syncUserWithCustomer(), { immediate: tr
                 <div class="flex-1">
                     <h4 class="font-black text-xs text-slate-800 line-clamp-1 uppercase">{{ item.descricao }}</h4>
                     <p class="text-[10px] font-black text-indigo-600 mt-1">TAM: {{ item.chosenSize }} | QTD: {{ item.chosenQty }}</p>
-                    <p class="text-lg font-black text-slate-900">R$ {{ item.totalPrice.toFixed(2) }}</p>
+                    <p v-if="isLoggedIn" class="text-lg font-black text-slate-900">R$ {{ item.totalPrice.toFixed(2) }}</p>
                 </div>
                 <button @click="removeFromCart(item.cartId)" class="p-3 bg-red-50 text-red-500 rounded-xl">
                   <Trash2 class="w-5 h-5"/>
@@ -735,7 +738,7 @@ watch([allCustomers, currentUser], () => syncUserWithCustomer(), { immediate: tr
             </div>
             
             <div class="bg-indigo-600 p-8 rounded-[3rem] text-white shadow-2xl mt-10">
-                <div class="flex justify-between items-center mb-6 opacity-80 font-bold uppercase text-xs">
+                <div v-if="isLoggedIn" class="flex justify-between items-center mb-6 opacity-80 font-bold uppercase text-xs">
                     <span>Subtotal</span>
                     <span>R$ {{ subtotalCart.toFixed(2) }}</span>
                 </div>
@@ -857,7 +860,7 @@ watch([allCustomers, currentUser], () => syncUserWithCustomer(), { immediate: tr
 
     <!-- 5. PAGAMENTO E TOTAL -->
     <div class="bg-indigo-600 p-8 rounded-[3rem] text-white shadow-2xl mb-12">
-        <div class="flex justify-between items-center mb-6">
+        <div v-if="isLoggedIn" class="flex justify-between items-center mb-6">
             <span class="font-bold opacity-70 uppercase text-xs">Valor Total</span>
             <span class="text-3xl font-black italic">R$ {{ totalFinal.toFixed(2) }}</span>
         </div>
