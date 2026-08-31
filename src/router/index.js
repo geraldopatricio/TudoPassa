@@ -12,6 +12,8 @@ import FinanceiroView from '../views/FinanceiroView.vue'
 import TransportadoraView from '../views/TransportadoraView.vue'
 import TrackingView from '../views/TrackingView.vue'
 import LogisticaAdminView from '../views/LogisticaAdminView.vue'
+import IntegracoesView from '../views/IntegracoesView.vue'
+import DocumentacaoView from '../views/DocumentacaoView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -80,6 +82,16 @@ const router = createRouter({
       path: '/usuarios',
       name: 'usuarios',
       component: UsuariosView
+    },
+    {
+      path: '/configuracoes/integracoes',
+      name: 'integracoes',
+      component: IntegracoesView
+    },
+    {
+      path: '/ajuda/documentacao',
+      name: 'documentacao',
+      component: DocumentacaoView
     }
   ]
 })

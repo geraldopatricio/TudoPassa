@@ -119,18 +119,25 @@ const toggleSelection = (lista, item) => {
   else form.value[lista].push(item)
 }
 
-const openModal = (cliente = null) => {
+const openModal = async (cliente = null) => {
   fotoFile.value = null
   if (cliente) {
-    editingCliente.value = cliente
-    form.value = { 
-      ...cliente,
-      formas_pagamento: Array.isArray(cliente.formas_pagamento) ? [...cliente.formas_pagamento] : [],
-      cartoes_loja: Array.isArray(cliente.cartoes_loja) ? [...cliente.cartoes_loja] : [],
-      ref_usuarios: Array.isArray(cliente.ref_usuarios) ? [...cliente.ref_usuarios] : [],
-      bloqueado: cliente.bloqueado === true || cliente.bloqueado === 'true'
+    let clienteCompleto = cliente
+    try {
+      const response = await fetch(`${API_URL}/${cliente.codigo}`)
+      if (response.ok) clienteCompleto = await response.json()
+    } catch (error) {
+      console.warn('Detalhes indisponíveis; usando os dados da listagem.', error)
     }
-    fotoPreview.value = cliente.foto ? `${BASE_URL}/uploads/clientes/${cliente.foto}` : null
+    editingCliente.value = clienteCompleto
+    form.value = { 
+      ...clienteCompleto,
+      formas_pagamento: Array.isArray(clienteCompleto.formas_pagamento) ? [...clienteCompleto.formas_pagamento] : [],
+      cartoes_loja: Array.isArray(clienteCompleto.cartoes_loja) ? [...clienteCompleto.cartoes_loja] : [],
+      ref_usuarios: Array.isArray(clienteCompleto.ref_usuarios) ? [...clienteCompleto.ref_usuarios] : [],
+      bloqueado: clienteCompleto.bloqueado === true || clienteCompleto.bloqueado === 'true'
+    }
+    fotoPreview.value = clienteCompleto.foto ? `${BASE_URL}/uploads/clientes/${clienteCompleto.foto}` : null
   } else {
     editingCliente.value = null
     fotoPreview.value = null

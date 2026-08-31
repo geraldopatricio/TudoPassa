@@ -1,13 +1,12 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { 
   LayoutDashboard, ShoppingCart, Package, Users, 
   Store, X, User, ChevronDown, ShieldCheck, Tag,
-  ClipboardList, DollarSign, Truck 
+  ClipboardList, DollarSign, Truck, Settings, CircleHelp 
 } from 'lucide-vue-next'
 
-// CORREÇÃO: Apenas um defineProps centralizado
 const props = defineProps({
   isOpen: Boolean,
   isCollapsed: Boolean
@@ -23,24 +22,57 @@ const openMenus = ref({
   financeiro: false,
   logistica: false,
   pessoas: false,
-  admin: false
+  admin: false,
+  configuracoes: false,
+  ajuda: false
 })
 
-// Função para alternar menus
+// Função para fechar todos os menus antes de abrir um novo (Efeito Acordeão)
 const toggleMenu = (menu) => {
-  // Se o menu estiver recolhido, não faz sentido abrir submenu (opcional)
   if (props.isCollapsed) return 
-  openMenus.value[menu] = !openMenus.value[menu]
+  
+  // Guarda o estado atual do menu clicado
+  const menuState = openMenus.value[menu]
+  
+  // 1. Fecha todos os menus
+  Object.keys(openMenus.value).forEach(key => {
+    openMenus.value[key] = false
+  })
+
+  // 2. Inverte o estado do menu clicado (se estava fechado, abre; se aberto, fecha)
+  openMenus.value[menu] = !menuState
 }
 
-// Lógica para manter o menu aberto conforme a rota
-onMounted(() => {
+// Função para abrir o menu correto baseado na rota atual
+const setMenuByRoute = () => {
+  // Opcional: Fechar todos antes de identificar o novo (para manter apenas um aberto)
+  Object.keys(openMenus.value).forEach(key => {
+    openMenus.value[key] = false
+  })
+
   if (['/pedidos'].includes(route.path)) openMenus.value.pedidos = true
   if (['/produtos', '/tabela-precos'].includes(route.path)) openMenus.value.estoque = true
   if (['/financeiro'].includes(route.path)) openMenus.value.financeiro = true
-  if (['/logistica-fretes'].includes(route.path)) openMenus.value.logistica = true
+  if (['/logistica-fretes', '/logistica-monitoramento'].includes(route.path)) openMenus.value.logistica = true
   if (['/clientes', '/profissionais'].includes(route.path)) openMenus.value.pessoas = true
   if (['/usuarios'].includes(route.path)) openMenus.value.admin = true
+  if (route.path.startsWith('/configuracoes')) openMenus.value.configuracoes = true
+  if (route.path.startsWith('/ajuda')) openMenus.value.ajuda = true
+}
+
+// Inicialização
+onMounted(() => {
+  setMenuByRoute()
+  
+  const userData = localStorage.getItem('usuario')
+  if (userData) {
+    usuarioLogado.value = JSON.parse(userData)
+  }
+})
+
+// Monitorar mudança de rota para atualizar o menu lateral automaticamente
+watch(() => route.path, () => {
+  setMenuByRoute()
 })
 
 const BASE_URL = import.meta.env.VITE_API_URL || '/api';
@@ -49,13 +81,6 @@ const usuarioLogado = ref({
   login: 'Usuário',
   tipo: 'Nível',
   foto: null
-})
-
-onMounted(() => {
-  const userData = localStorage.getItem('usuario')
-  if (userData) {
-    usuarioLogado.value = JSON.parse(userData)
-  }
 })
 
 const isGroupActive = (paths) => paths.includes(route.path)
@@ -80,7 +105,6 @@ const isGroupActive = (paths) => paths.includes(route.path)
           Tudo Passa
         </span>
       </div>
-      <!-- Botão fechar mobile -->
       <button v-if="isOpen" @click="emit('close')" class="lg:hidden ml-auto p-2 text-slate-400 hover:bg-slate-50 rounded-lg">
         <X class="w-6 h-6" />
       </button>
@@ -107,13 +131,10 @@ const isGroupActive = (paths) => paths.includes(route.path)
         <span v-if="!isCollapsed" class="font-bold truncate uppercase text-xs tracking-tighter">E-Commerce</span>
       </a>      
 
-      <!-- GRUPOS COM SUBMENU -->
-
       <!-- PEDIDOS -->
       <div class="py-1">
         <button @click="toggleMenu('pedidos')" 
           :class="['w-full flex items-center px-3 py-3 rounded-xl transition-all group', 
-          /* ALTERADO AQUI: de /pedidos-entradas para /pedidos */
           isGroupActive(['/pedidos']) ? 'text-indigo-600 bg-indigo-50/30 font-bold' : 'text-slate-500 hover:bg-slate-50',
           isCollapsed ? 'justify-center' : 'justify-between']">
           <div class="flex items-center gap-3">
@@ -122,9 +143,7 @@ const isGroupActive = (paths) => paths.includes(route.path)
           </div>
           <ChevronDown v-if="!isCollapsed" class="w-4 h-4 transition-transform" :class="{ 'rotate-180': openMenus.pedidos }" />
         </button>
-        
         <div v-show="openMenus.pedidos && !isCollapsed" class="mt-1 ml-4 border-l-2 border-slate-100 pl-4 space-y-1">
-          <!-- ALTERADO AQUI: to="/pedidos" -->
           <router-link to="/pedidos" class="block px-4 py-2 text-xs text-slate-500 hover:text-indigo-600 rounded-xl uppercase font-bold" active-class="!text-indigo-600 font-black">
             Entradas
           </router-link>
@@ -153,7 +172,6 @@ const isGroupActive = (paths) => paths.includes(route.path)
       <div class="py-1">
         <button @click="toggleMenu('financeiro')" 
           :class="['w-full flex items-center px-3 py-3 rounded-xl transition-all group', 
-          /* ALTERADO: isGroupActive(['/financeiro']) */
           isGroupActive(['/financeiro']) ? 'text-indigo-600 bg-indigo-50/30 font-bold' : 'text-slate-500 hover:bg-slate-50',
           isCollapsed ? 'justify-center' : 'justify-between']">
           <div class="flex items-center gap-3">
@@ -162,9 +180,7 @@ const isGroupActive = (paths) => paths.includes(route.path)
           </div>
           <ChevronDown v-if="!isCollapsed" class="w-4 h-4 transition-transform" :class="{ 'rotate-180': openMenus.financeiro }" />
         </button>
-
         <div v-show="openMenus.financeiro && !isCollapsed" class="mt-1 ml-4 border-l-2 border-slate-100 pl-4 space-y-1">
-          <!-- ALTERADO: to="/financeiro" -->
           <router-link to="/financeiro" class="block px-4 py-2 text-xs text-slate-500 hover:text-indigo-600 rounded-xl uppercase font-bold" active-class="!text-indigo-600 font-black">
             Entradas
           </router-link>
@@ -175,8 +191,7 @@ const isGroupActive = (paths) => paths.includes(route.path)
       <div class="py-1">
         <button @click="toggleMenu('logistica')" 
           :class="['w-full flex items-center px-3 py-3 rounded-xl transition-all group', 
-          /* Verifica se o grupo está ativo */
-          isGroupActive(['/logistica-fretes']) ? 'text-indigo-600 bg-indigo-50/30 font-bold' : 'text-slate-500 hover:bg-slate-50',
+          isGroupActive(['/logistica-fretes', '/logistica-monitoramento']) ? 'text-indigo-600 bg-indigo-50/30 font-bold' : 'text-slate-500 hover:bg-slate-50',
           isCollapsed ? 'justify-center' : 'justify-between']">
           <div class="flex items-center gap-3">
             <Truck class="w-6 h-6 shrink-0" />
@@ -184,12 +199,8 @@ const isGroupActive = (paths) => paths.includes(route.path)
           </div>
           <ChevronDown v-if="!isCollapsed" class="w-4 h-4 transition-transform" :class="{ 'rotate-180': openMenus.logistica }" />
         </button>
-
         <div v-show="openMenus.logistica && !isCollapsed" class="mt-1 ml-4 border-l-2 border-slate-100 pl-4 space-y-1">
-          <!-- O LINK PARA A TransportadoraView.vue -->
-          <router-link to="/logistica-fretes" 
-            class="block px-4 py-2 text-xs text-slate-500 hover:text-indigo-600 rounded-xl uppercase font-bold" 
-            active-class="!text-indigo-600 font-black">
+          <router-link to="/logistica-fretes" class="block px-4 py-2 text-xs text-slate-500 hover:text-indigo-600 rounded-xl uppercase font-bold" active-class="!text-indigo-600 font-black">
             Fretes
           </router-link>
           <router-link to="/logistica-monitoramento" class="block px-4 py-2 text-xs text-slate-500 hover:text-indigo-600 rounded-xl uppercase font-bold" active-class="!text-indigo-600 font-black">
@@ -230,6 +241,34 @@ const isGroupActive = (paths) => paths.includes(route.path)
         </button>
         <div v-show="openMenus.admin && !isCollapsed" class="mt-1 ml-4 border-l-2 border-slate-100 pl-4 space-y-1">
           <router-link to="/usuarios" class="block px-4 py-2 text-xs text-slate-500 hover:text-indigo-600 rounded-xl uppercase font-bold" active-class="!text-indigo-600 font-black">Usuários</router-link>
+        </div>
+      </div>
+
+      <!-- CONFIGURAÇÕES -->
+      <div class="py-1">
+        <button @click="toggleMenu('configuracoes')"
+          :class="['w-full flex items-center px-3 py-3 rounded-xl transition-all group',
+          isGroupActive(['/configuracoes/integracoes']) ? 'text-indigo-600 bg-indigo-50/30 font-bold' : 'text-slate-500 hover:bg-slate-50',
+          isCollapsed ? 'justify-center' : 'justify-between']">
+          <div class="flex items-center gap-3"><Settings class="w-6 h-6 shrink-0" /><span v-if="!isCollapsed" class="font-medium truncate uppercase text-xs tracking-tighter">Configurações</span></div>
+          <ChevronDown v-if="!isCollapsed" class="w-4 h-4 transition-transform" :class="{ 'rotate-180': openMenus.configuracoes }" />
+        </button>
+        <div v-show="openMenus.configuracoes && !isCollapsed" class="mt-1 ml-4 border-l-2 border-slate-100 pl-4 space-y-1">
+          <router-link to="/configuracoes/integracoes" class="block px-4 py-2 text-xs text-slate-500 hover:text-indigo-600 rounded-xl uppercase font-bold" active-class="!text-indigo-600 font-black">Integrações</router-link>
+        </div>
+      </div>
+
+      <!-- AJUDA -->
+      <div class="py-1">
+        <button @click="toggleMenu('ajuda')"
+          :class="['w-full flex items-center px-3 py-3 rounded-xl transition-all group',
+          isGroupActive(['/ajuda/documentacao']) ? 'text-indigo-600 bg-indigo-50/30 font-bold' : 'text-slate-500 hover:bg-slate-50',
+          isCollapsed ? 'justify-center' : 'justify-between']">
+          <div class="flex items-center gap-3"><CircleHelp class="w-6 h-6 shrink-0" /><span v-if="!isCollapsed" class="font-medium truncate uppercase text-xs tracking-tighter">Ajuda</span></div>
+          <ChevronDown v-if="!isCollapsed" class="w-4 h-4 transition-transform" :class="{ 'rotate-180': openMenus.ajuda }" />
+        </button>
+        <div v-show="openMenus.ajuda && !isCollapsed" class="mt-1 ml-4 border-l-2 border-slate-100 pl-4 space-y-1">
+          <router-link to="/ajuda/documentacao" class="block px-4 py-2 text-xs text-slate-500 hover:text-indigo-600 rounded-xl uppercase font-bold" active-class="!text-indigo-600 font-black">Documentação</router-link>
         </div>
       </div>
     </nav>
