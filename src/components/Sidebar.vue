@@ -262,13 +262,14 @@ const isGroupActive = (paths) => paths.includes(route.path)
       <div class="py-1">
         <button @click="toggleMenu('ajuda')"
           :class="['w-full flex items-center px-3 py-3 rounded-xl transition-all group',
-          isGroupActive(['/ajuda/documentacao']) ? 'text-indigo-600 bg-indigo-50/30 font-bold' : 'text-slate-500 hover:bg-slate-50',
+          isGroupActive(['/ajuda/api', '/ajuda/documentacao', '/ajuda/help']) ? 'text-indigo-600 bg-indigo-50/30 font-bold' : 'text-slate-500 hover:bg-slate-50',
           isCollapsed ? 'justify-center' : 'justify-between']">
           <div class="flex items-center gap-3"><CircleHelp class="w-6 h-6 shrink-0" /><span v-if="!isCollapsed" class="font-medium truncate uppercase text-xs tracking-tighter">Ajuda</span></div>
           <ChevronDown v-if="!isCollapsed" class="w-4 h-4 transition-transform" :class="{ 'rotate-180': openMenus.ajuda }" />
         </button>
         <div v-show="openMenus.ajuda && !isCollapsed" class="mt-1 ml-4 border-l-2 border-slate-100 pl-4 space-y-1">
-          <router-link to="/ajuda/documentacao" class="block px-4 py-2 text-xs text-slate-500 hover:text-indigo-600 rounded-xl uppercase font-bold" active-class="!text-indigo-600 font-black">Documentação</router-link>
+          <router-link to="/ajuda/api" class="block px-4 py-2 text-xs text-slate-500 hover:text-indigo-600 rounded-xl uppercase font-bold" active-class="!text-indigo-600 font-black">API</router-link>
+          <router-link to="/ajuda/help" class="block px-4 py-2 text-xs text-slate-500 hover:text-indigo-600 rounded-xl uppercase font-bold" active-class="!text-indigo-600 font-black">Help</router-link>
         </div>
       </div>
     </nav>

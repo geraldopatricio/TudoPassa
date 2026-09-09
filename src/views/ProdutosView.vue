@@ -190,6 +190,7 @@ const saveProduto = async () => {
   formData.append('descricao', form.value.descricao)
   formData.append('unidade', form.value.unidade)
   formData.append('variantes', JSON.stringify(form.value.variantes))
+  if (form.value.imagem) formData.append('imagem', form.value.imagem)
   
   if (fileInput.value?.files[0]) {
     formData.append('imagem', fileInput.value.files[0])

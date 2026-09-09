@@ -25,6 +25,17 @@ const filterStatus = ref('TODOS')
 const isModalOpen = ref(false)
 const orderDetail = ref(null)
 const loadingDetails = ref(false)
+const sendingSale = ref(false)
+const resendSale = async () => {
+  sendingSale.value = true
+  try {
+    const response = await fetch(`${API_URL}/${orderDetail.value.id}/integracao`, { method: 'POST' })
+    const data = await response.json()
+    if (!response.ok) throw new Error(data.message)
+    orderDetail.value.integracao = data.integracao
+    await fetchPedidos()
+  } catch (error) { alert(error.message) } finally { sendingSale.value = false }
+}
 
 // --- PAGINAÇÃO ---
 const currentPage = ref(1)
@@ -68,10 +79,10 @@ const updateStatus = async (id, newStatus) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: newStatus })
     })
-    if (res.ok) {
-      if (orderDetail.value) orderDetail.value.status = newStatus
-      fetchPedidos()
-    }
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.message || 'Falha ao atualizar pedido e financeiro')
+    if (orderDetail.value) orderDetail.value.status = data.status
+    await fetchPedidos()
   } catch (e) {
     alert("Erro ao atualizar status")
   }
@@ -193,7 +204,6 @@ onMounted(fetchDadosIniciais)
                 <option value="TODOS">Todos Status</option>
                 <option value="Pendente">Pendentes</option>
                 <option value="Pago">Pagos</option>
-                <option value="Enviado">Enviados</option>
                 <option value="Cancelado">Cancelados</option>
              </select>
           </div>
@@ -235,7 +245,7 @@ onMounted(fetchDadosIniciais)
                   <td class="px-6 py-4 font-black text-indigo-600">R$ {{ p.total.toFixed(2) }}</td>
                   <td class="px-6 py-4">
                     <span :class="getStatusColor(p.status)" class="px-3 py-1 rounded-full text-[9px] font-black uppercase">
-                      {{ p.status }}
+                      {{ p.status === 'Enviado' ? 'Enviado (legado)' : p.status }}
                     </span>
                   </td>
                   <td class="px-6 py-4">
@@ -270,6 +280,11 @@ onMounted(fetchDadosIniciais)
         </div>
 
         <div v-else-if="orderDetail" class="p-8 overflow-y-auto custom-scrollbar space-y-8">
+          <div v-if="orderDetail.integracao" class="p-4 bg-slate-50 rounded-xl text-sm">
+            <strong>Integração de vendas: {{ orderDetail.integracao.status }}</strong>
+            <p>{{ orderDetail.integracao.provider }} {{ orderDetail.integracao.mensagem }}</p>
+            <button v-if="orderDetail.integracao.status === 'erro_configuracao' && orderDetail.status !== 'Cancelado'" @click="resendSale" :disabled="sendingSale" class="mt-2 text-indigo-600 font-bold">{{ sendingSale ? 'Enviando...' : 'Enviar após corrigir configuração' }}</button>
+          </div>
           
           <!-- Infos do Cliente e Entrega -->
           <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -329,9 +344,10 @@ onMounted(fetchDadosIniciais)
             <div class="space-y-4" v-if="usuarioLogado.tipo !== 'Cliente'">
               <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Alterar Status</h3>
               <div class="flex gap-2">
+                <p class="w-full text-xs text-slate-500">O andamento da entrega deve ser acompanhado na Logística.</p>
+                <p v-if="orderDetail.status === 'Enviado'" class="w-full text-xs text-amber-700">Este pedido possui o status antigo Enviado. Selecione o status financeiro correto para atualizá-lo.</p>
                 <button @click="updateStatus(orderDetail.id, 'Pendente')" :class="orderDetail.status === 'Pendente' ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-400'" class="px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all">Pendente</button>
                 <button @click="updateStatus(orderDetail.id, 'Pago')" :class="orderDetail.status === 'Pago' ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-400'" class="px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all">Pago</button>
-                <button @click="updateStatus(orderDetail.id, 'Enviado')" :class="orderDetail.status === 'Enviado' ? 'bg-blue-500 text-white' : 'bg-slate-100 text-slate-400'" class="px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all">Enviado</button>
                 <button @click="updateStatus(orderDetail.id, 'Cancelado')" :class="orderDetail.status === 'Cancelado' ? 'bg-red-500 text-white' : 'bg-slate-100 text-slate-400'" class="px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all">Cancelar</button>
               </div>
             </div>

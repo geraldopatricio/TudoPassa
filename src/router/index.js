@@ -18,6 +18,7 @@ import DocumentacaoView from '../views/DocumentacaoView.vue'
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
+    { path: '/dashboard', name: 'dashboard', component: () => import('../views/DashboardView.vue') },
     {
       path: '/',
       name: 'login',
@@ -89,9 +90,15 @@ const router = createRouter({
       component: IntegracoesView
     },
     {
-      path: '/ajuda/documentacao',
+      path: '/ajuda/api',
+      alias: '/ajuda/documentacao',
       name: 'documentacao',
       component: DocumentacaoView
+    },
+    {
+      path: '/ajuda/help',
+      name: 'help',
+      component: () => import('../views/HelpView.vue')
     }
   ]
 })

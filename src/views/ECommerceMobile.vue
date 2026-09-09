@@ -222,7 +222,7 @@ const syncUserWithCustomer = () => {
 
 const selectCustomer = (c) => {
   customer.value = {
-    nome: c.nome, cpf: c.cpf_cnpj, email: c.email, whatsapp: c.celular,
+    codigo: c.codigo, nome: c.nome, cpf: c.cpf_cnpj, email: c.email, whatsapp: c.celular,
     endereco: `${c.endereco}, ${c.numero || ''} - ${c.bairro || ''}, ${c.cidade || ''}/${c.uf || ''}`.replace(/ ,/g, '')
   }
   customerSearchQuery.value = c.nome
@@ -237,14 +237,16 @@ const checkExistingCustomer = () => {
 
 const saveCustomerToDB = async () => {
   const clienteData = {
-    codigo: String(customer.value.cpf || '').replace(/\D/g, ''), 
+    codigo: customer.value.codigo || String(customer.value.cpf || '').replace(/\D/g, ''),
     nome: customer.value.nome, cpf_cnpj: String(customer.value.cpf || ''),
     celular: customer.value.whatsapp, email: customer.value.email, endereco: customer.value.endereco
   }
   const exists = allCustomers.value.find(c => c.email === customer.value.email)
+  if (exists) { clienteData.codigo = exists.codigo; customer.value.codigo = exists.codigo }
   const method = exists ? 'PUT' : 'POST'
   const url = exists ? `${API_URL}/clientes/${clienteData.codigo}` : `${API_URL}/clientes`
-  await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(clienteData) })
+  const response = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(clienteData) })
+  if (!response.ok) throw new Error('Não foi possível salvar o cliente.')
 }
 
 // --- PAGAMENTO E FINALIZAÇÃO ---
@@ -298,10 +300,12 @@ const handlePayment = async () => {
         body: JSON.stringify(pedidoPayload)
       })
 
+      if (!pedidoRes.ok) { const error = await pedidoRes.json(); throw new Error(error.message || 'Erro ao salvar pedido') }
       if (pedidoRes.ok) {
         const pedidoJson = await pedidoRes.json()
         if (pedidoJson.success && pedidoJson.pedido?.id) {
           pixData.value.pedidoId = pedidoJson.pedido.id
+          if (!['local', 'enviado'].includes(pedidoJson.pedido.integracao?.status)) alert('Pedido salvo. O envio à integração precisa de atenção; consulte os detalhes do pedido.')
         }
         console.log("Pedido salvo com sucesso no banco de dados!")
         
@@ -341,7 +345,7 @@ const handleAddToCart = () => {
         itemsToAdd.push({
           cartId: Date.now() + Math.random(), referencia: selectedProduct.value.referencia,
           descricao: selectedProduct.value.descricao, imagem: selectedProduct.value.imagem,
-          chosenSize: tam, chosenQty: selectedQty.value, unitPrice: v.valor_unitario, totalPrice: v.valor_unitario * selectedQty.value
+          codigoCor: v.codigo_cor, chosenSize: tam, chosenQty: selectedQty.value, unitPrice: v.valor_unitario, totalPrice: v.valor_unitario * selectedQty.value
         })
       }
     })
@@ -351,7 +355,7 @@ const handleAddToCart = () => {
         itemsToAdd.push({
           cartId: Date.now() + Math.random(), referencia: selectedProduct.value.referencia,
           descricao: selectedProduct.value.descricao, imagem: selectedProduct.value.imagem,
-          chosenSize: tam, chosenQty: qty, unitPrice: v.valor_unitario, totalPrice: v.valor_unitario * qty
+          codigoCor: v.codigo_cor, chosenSize: tam, chosenQty: qty, unitPrice: v.valor_unitario, totalPrice: v.valor_unitario * qty
         })
       }
     })

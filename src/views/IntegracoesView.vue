@@ -18,11 +18,14 @@ const providers = [
   { id: 'alpha', name: 'Alpha Sistemas', group: 'ERP', description: 'Clientes, representantes e produtos Alpha.' }
 ]
 const emptyResource = () => ({ get: '', getOne: '', post: '', put: '', responsePath: '' })
-const config = ref({ provider: 'local', enabled: false, cnpjEnrichment: true, credentials: {}, resources: { produtos: emptyResource(), clientes: emptyResource(), profissionais: { ...emptyResource(), tipo: 'representante' } } })
+const config = ref({ provider: 'local', enabled: false, cnpjEnrichment: true, credentials: {}, resources: { produtos: emptyResource(), clientes: emptyResource(), profissionais: { ...emptyResource(), tipo: 'representante' }, vendas: { post: '', defaults: {}, sizePositions: {} } } })
 const saving = ref(false), testing = ref(false), message = ref(''), advanced = ref(false)
+const sizeName = ref('')
+const addSize = () => { const size = sizeName.value.trim().toUpperCase(); if (size) config.value.resources.vendas.sizePositions[size] = ''; sizeName.value = '' }
+const salesFields = { codigoVendedor: 'Código do vendedor', codigoLoja: 'Código da loja', tabelaPreco: 'Tabela de preço', codigoFormaPagamento: 'Forma de pagamento PIX', codigoCondicaoPagamento: 'Condição de pagamento', codigoContaCorrente: 'Conta corrente' }
 const selected = computed(() => providers.find(p => p.id === config.value.provider) || providers[0])
 
-const choose = (id) => { config.value.provider = id; config.value.enabled = id !== 'local'; message.value = '' }
+const choose = (id) => { config.value.resources.vendas = { post: id === 'alpha' ? 'https://api-tudopassaweb.alphasystemas.com.br/v1/vendas' : '', defaults: {}, sizePositions: {} }; config.value.provider = id; config.value.enabled = id !== 'local'; message.value = '' }
 const load = async () => {
   const response = await fetch(`${BASE_URL}/integracoes`)
   if (!response.ok) throw new Error('Não foi possível carregar a configuração')
@@ -55,7 +58,7 @@ onMounted(() => load().catch(error => message.value = error.message))
     <div class="mb-8">
       <p class="text-xs font-black uppercase tracking-widest text-indigo-600">Configurações</p>
       <h1 class="text-3xl font-black text-slate-900 mt-1">Integrações</h1>
-      <p class="text-slate-500 mt-2">Escolha a origem dos produtos, clientes e fornecedores. As telas atuais continuam usando as mesmas rotas.</p>
+      <p class="text-slate-500 mt-2">Escolha a origem dos produtos, clientes e fornecedores e o destino dos pedidos de venda.</p>
     </div>
 
     <div class="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -81,6 +84,25 @@ onMounted(() => load().catch(error => message.value = error.message))
         <label class="text-xs font-bold text-slate-600">Client ID<input v-model="config.credentials.clientId" class="mt-2 w-full border border-slate-200 rounded-xl p-3 font-normal"></label>
         <label class="text-xs font-bold text-slate-600">Client Secret<input v-model="config.credentials.clientSecret" type="password" class="mt-2 w-full border border-slate-200 rounded-xl p-3 font-normal"></label>
         <label class="text-xs font-bold text-slate-600">Tipo dos profissionais<select v-model="config.resources.profissionais.tipo" class="mt-2 w-full border border-slate-200 rounded-xl p-3 font-normal"><option v-for="tipo in ['representante','revendedor','fornecedor','afiliado','vendedor','transportadora']" :key="tipo">{{ tipo }}</option></select></label>
+      </div>
+      <div class="mt-6 p-4 bg-slate-50 rounded-2xl space-y-4">
+        <h3 class="font-bold">Pedidos de venda</h3>
+        <p class="text-sm text-slate-600">Cada pedido criado será enviado à integração selecionada. O resultado fica disponível nos detalhes do pedido.</p>
+        <label class="block text-sm">Endpoint POST de vendas<input v-model="config.resources.vendas.post" placeholder="https://api.empresa.com/v1/vendas" class="mt-2 w-full border rounded-xl p-3"></label>
+        <template v-if="config.provider === 'alpha'">
+          <p class="text-sm text-slate-600">Informe os códigos reais da Alpha. O checkout utiliza PIX; a venda será enviada ao criar o pedido, ainda pendente de pagamento.</p>
+          <div class="grid md:grid-cols-2 gap-3">
+            <label v-for="(label, field) in salesFields" :key="field" class="text-sm">{{ label }}<input v-model.number="config.resources.vendas.defaults[field]" type="number" min="1" step="1" class="mt-1 w-full border rounded-xl p-2"></label>
+          </div>
+          <p class="text-sm">Associe cada tamanho à posição da grade Alpha (pos1 a pos10), conforme o cadastro dos produtos.</p>
+          <div class="flex gap-2"><input v-model="sizeName" placeholder="Tamanho, ex.: M" class="border rounded-xl p-2"><button @click="addSize" class="text-indigo-600">Adicionar tamanho</button></div>
+          <div v-for="(_, size) in config.resources.vendas.sizePositions" :key="size" class="flex items-center gap-3">
+            <label>{{ size }}: <input v-model.number="config.resources.vendas.sizePositions[size]" type="number" min="1" max="10" step="1" class="border rounded p-2 w-20"></label>
+            <button @click="delete config.resources.vendas.sizePositions[size]" class="text-red-600">Remover</button>
+          </div>
+        </template>
+        <p v-else class="text-sm text-slate-600">O endpoint recebe o pedido e seus itens no formato da TudoPassa. APIs com outro contrato precisam de um adaptador.</p>
+        <p class="text-xs text-slate-500">O teste de conexão consulta os cadastros; não cria vendas.</p>
       </div>
       <button @click="advanced = !advanced" class="mt-6 flex gap-2 items-center text-sm font-black text-indigo-600">Endpoints avançados <ChevronUp v-if="advanced" class="w-4"/><ChevronDown v-else class="w-4"/></button>
       <div v-if="advanced" class="mt-4 space-y-5">
