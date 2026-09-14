@@ -18,7 +18,7 @@ const fotoPreview = ref(null)
 const fotoFile = ref(null)
 
 // Opções de tipo baseadas no seu backend
-const tiposUsuario = ['Cliente', 'Vendedor', 'Transportadora', 'Gerente', 'Admin']
+const tiposUsuario = ['Cliente', 'Vendedor', 'Revendedor', 'Afiliado', 'Transportadora', 'Gerente', 'Admin']
 
 // Campos do formulário
 const form = ref({

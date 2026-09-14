@@ -44,6 +44,9 @@ const router = createRouter({
       name: 'pedidos',
       component: PedidosView
     },
+    { path: '/relatorios/pedidos', name: 'relatorio-pedidos', component: () => import('../views/RelatorioPedidosView.vue') },
+    { path: '/relatorios/estoque', name: 'relatorio-estoque', component: () => import('../views/RelatorioPosicaoView.vue') },
+    { path: '/relatorios/financeiro', name: 'relatorio-financeiro', component: () => import('../views/RelatorioPosicaoView.vue') },
     {
       path: '/financeiro',
       name: 'financeiro',

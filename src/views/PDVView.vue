@@ -10,7 +10,6 @@ import {
 // --- CONFIGURAÇÃO DA API ---
 const API_URL = import.meta.env.VITE_API_URL || '/api' // Altere para sua URL se necessário
 
-const isSidebarOpen = ref(false)
 const viewType = ref('grid') 
 const searchQuery = ref('') 
 const loading = ref(true)
@@ -86,14 +85,17 @@ const saveQuickCustomer = async () => {
 onMounted(() => {
   fetchProducts()
   fetchAllCustomers() // Adicionado aqui
-  window.addEventListener('keydown', handleShortcuts)
 })
 
 // --- PERSISTÊNCIA (LOCALSTORAGE) ---
-const savedOrders = ref(JSON.parse(localStorage.getItem('gpsoft_pedidos_salvos') || '[]'))
+const savedOrders = ref((() => {
+  try { return JSON.parse(localStorage.getItem('gpsoft_pedidos_salvos') || '[]') }
+  catch { return [] }
+})())
 
 const updateStorage = () => {
   localStorage.setItem('gpsoft_pedidos_salvos', JSON.stringify(savedOrders.value))
+  window.dispatchEvent(new Event('saved-orders-updated'))
 }
 
 const paymentMethods = [
@@ -212,6 +214,11 @@ const saveForLater = () => {
     customer: selectedCustomer.value,
     items: [...cart.value],
     total: totalFinal.value,
+    discountValue: discountValue.value,
+    discountType: discountType.value,
+    feeValue: feeValue.value,
+    feeType: feeType.value,
+    paymentMethod: paymentMethod.value,
     date: new Date().toISOString()
   })
   updateStorage()
@@ -225,6 +232,11 @@ const restoreOrder = (order) => {
   }
   cart.value = [...order.items]
   selectedCustomer.value = order.customer
+  discountValue.value = order.discountValue ?? 0
+  discountType.value = order.discountType ?? 'fixed'
+  feeValue.value = order.feeValue ?? 0
+  feeType.value = order.feeType ?? 'fixed'
+  paymentMethod.value = order.paymentMethod ?? 'PIX'
   savedOrders.value = savedOrders.value.filter(o => o.id !== order.id)
   updateStorage()
 }
@@ -248,24 +260,20 @@ const handleShortcuts = (event) => {
 }
 
 onMounted(() => {
-  fetchProducts()
   window.addEventListener('keydown', handleShortcuts)
+  window.addEventListener('restore-saved-order', handleRestoreEvent)
 })
 
-onUnmounted(() => window.removeEventListener('keydown', handleShortcuts))
+const handleRestoreEvent = event => restoreOrder(event.detail)
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleShortcuts)
+  window.removeEventListener('restore-saved-order', handleRestoreEvent)
+})
 </script>
 
 <template>
   <div class="flex h-screen bg-slate-50 overflow-hidden font-sans">
-    <Sidebar :isOpen="isSidebarOpen" @close="isSidebarOpen = false" />
-
     <div class="flex-1 flex flex-col min-w-0 relative">
-      <NavBar 
-        @toggleSidebar="isSidebarOpen = !isSidebarOpen" 
-        :savedOrders="savedOrders"
-        @restoreOrder="restoreOrder"
-      />
-
       <!-- Banner de Pedidos Salvos -->
       <div v-if="hasPendingOrders" class="bg-indigo-600 text-white text-[10px] py-1.5 flex items-center justify-center gap-2 animate-pulse font-black uppercase tracking-widest">
         <AlertCircle class="w-3.5 h-3.5" /> Clique no sino para recuperar pedidos salvos

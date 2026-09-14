@@ -1,12 +1,37 @@
 <script setup>
-import { ref, computed } from 'vue'
-import { useRoute } from 'vue-router'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import Sidebar from './components/Sidebar.vue'
 import NavBar from './components/NavBar.vue'
 
 const route = useRoute()
+const router = useRouter()
 const isCollapsed = ref(false)
 const isMobileOpen = ref(false)
+const savedOrders = ref([])
+const refreshSavedOrders = () => {
+  try { savedOrders.value = JSON.parse(localStorage.getItem('gpsoft_pedidos_salvos') || '[]') }
+  catch { savedOrders.value = [] }
+}
+const handleStorage = event => {
+  if (!event || event.key === 'gpsoft_pedidos_salvos') refreshSavedOrders()
+}
+const restoreSavedOrder = async order => {
+  if (route.path !== '/pdv') {
+    await router.push('/pdv')
+    await nextTick()
+  }
+  window.dispatchEvent(new CustomEvent('restore-saved-order', { detail: order }))
+}
+onMounted(() => {
+  refreshSavedOrders()
+  window.addEventListener('saved-orders-updated', refreshSavedOrders)
+  window.addEventListener('storage', handleStorage)
+})
+onUnmounted(() => {
+  window.removeEventListener('saved-orders-updated', refreshSavedOrders)
+  window.removeEventListener('storage', handleStorage)
+})
 
 // Não mostra menu na tela de Login
 const showLayout = computed(() => {
@@ -40,6 +65,8 @@ const handleToggleSidebar = () => {
       <!-- IMPORTANTE: O evento @toggleSidebar deve chamar a função handleToggleSidebar -->
       <NavBar 
         v-if="showLayout"
+        :savedOrders="savedOrders"
+        @restoreOrder="restoreSavedOrder"
         @toggleSidebar="handleToggleSidebar" 
       />
 

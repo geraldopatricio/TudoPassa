@@ -4,7 +4,7 @@ import { useRoute } from 'vue-router'
 import { 
   LayoutDashboard, ShoppingCart, Package, Users, 
   Store, X, User, ChevronDown, ShieldCheck, Tag,
-  ClipboardList, DollarSign, Truck, Settings, CircleHelp 
+  ClipboardList, DollarSign, Truck, Settings, CircleHelp, FileBarChart2
 } from 'lucide-vue-next'
 
 const props = defineProps({
@@ -18,6 +18,7 @@ const route = useRoute()
 // Estados para controlar quais submenus estão abertos
 const openMenus = ref({
   pedidos: false,
+  relatorios: false,
   estoque: false,
   financeiro: false,
   logistica: false,
@@ -51,6 +52,7 @@ const setMenuByRoute = () => {
   })
 
   if (['/pedidos'].includes(route.path)) openMenus.value.pedidos = true
+  if (route.path.startsWith('/relatorios')) openMenus.value.relatorios = true
   if (['/produtos', '/tabela-precos'].includes(route.path)) openMenus.value.estoque = true
   if (['/financeiro'].includes(route.path)) openMenus.value.financeiro = true
   if (['/logistica-fretes', '/logistica-monitoramento'].includes(route.path)) openMenus.value.logistica = true
@@ -147,6 +149,19 @@ const isGroupActive = (paths) => paths.includes(route.path)
           <router-link to="/pedidos" class="block px-4 py-2 text-xs text-slate-500 hover:text-indigo-600 rounded-xl uppercase font-bold" active-class="!text-indigo-600 font-black">
             Entradas
           </router-link>
+        </div>
+      </div>
+
+      <!-- RELATÓRIOS -->
+      <div class="py-1">
+        <button @click="toggleMenu('relatorios')" :class="['w-full flex items-center px-3 py-3 rounded-xl transition-all group', route.path.startsWith('/relatorios') ? 'text-indigo-600 bg-indigo-50/30 font-bold' : 'text-slate-500 hover:bg-slate-50', isCollapsed ? 'justify-center' : 'justify-between']">
+          <div class="flex items-center gap-3"><FileBarChart2 class="w-6 h-6 shrink-0" /><span v-if="!isCollapsed" class="font-medium truncate uppercase text-xs tracking-tighter">Relatórios</span></div>
+          <ChevronDown v-if="!isCollapsed" class="w-4 h-4 transition-transform" :class="{ 'rotate-180': openMenus.relatorios }" />
+        </button>
+        <div v-show="openMenus.relatorios && !isCollapsed" class="mt-1 ml-4 border-l-2 border-slate-100 pl-4 space-y-1">
+          <router-link to="/relatorios/pedidos" class="block px-4 py-2 text-xs text-slate-500 hover:text-indigo-600 rounded-xl uppercase font-bold" active-class="!text-indigo-600 font-black">Pedidos</router-link>
+          <router-link to="/relatorios/estoque" class="block px-4 py-2 text-xs text-slate-500 hover:text-indigo-600 rounded-xl uppercase font-bold" active-class="!text-indigo-600 font-black">Posição de estoque</router-link>
+          <router-link to="/relatorios/financeiro" class="block px-4 py-2 text-xs text-slate-500 hover:text-indigo-600 rounded-xl uppercase font-bold" active-class="!text-indigo-600 font-black">Posição financeira</router-link>
         </div>
       </div>
 
