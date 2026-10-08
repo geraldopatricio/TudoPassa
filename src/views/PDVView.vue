@@ -128,6 +128,7 @@ const fetchProducts = async () => {
         price: p.variantes?.[0]?.valor_unitario || 0, // busca valor da primeira variante
         code: p.referencia, // substitui code por referencia
         image: p.imagem ? `${API_URL}/uploads/produtos/${p.imagem}` : '/assets/img/placeholder.png',
+        variantes: p.variantes || [],
         discount: 0
       }))
     }
@@ -168,19 +169,28 @@ const changeAmount = computed(() => Math.max(0, totalPaidInModal.value - totalFi
 const hasPendingOrders = computed(() => savedOrders.value.length > 0)
 
 // --- FUNÇÕES DO CARRINHO ---
-const addToCart = (product) => {
-  const finalPrice = product.price - (product.discount || 0)
-  const existingItem = cart.value.find(item => item.id === product.id)
-  if (existingItem) {
-    existingItem.qty++
-  } else {
-    cart.value.push({ ...product, price: finalPrice, originalPrice: product.price, qty: 1 })
-  }
+const variantProduct = ref(null)
+const variantQuantities = ref({})
+const variantRows = computed(() => (variantProduct.value?.variantes || []).flatMap((v, index) => Object.entries(v.grade || {}).filter(([, stock]) => Number(stock) > 0).map(([size, stock]) => ({ key: `${variantProduct.value.id}:${index}:${size}`, size, stock: Number(stock), color: v.cor_codigo_nome || v.codigo_cor || 'Sem cor', codigoCor: v.codigo_cor, price: Number(v.valor_unitario) }))))
+const availableStock = row => Math.max(0, row.stock - (cart.value.find(i => i.id === row.key)?.qty || 0))
+const addToCart = product => { variantProduct.value = product; variantQuantities.value = {} }
+const confirmVariants = () => {
+  const rows = variantRows.value.filter(row => Number(variantQuantities.value[row.key]) > 0)
+  if (!rows.length) return alert('Selecione uma quantidade disponível.')
+  if (rows.some(row => !Number.isSafeInteger(Number(variantQuantities.value[row.key])) || Number(variantQuantities.value[row.key]) > availableStock(row))) return alert('Quantidade superior ao saldo ou inválida.')
+  rows.forEach(row => {
+    const qty = Number(variantQuantities.value[row.key])
+    const existing = cart.value.find(i => i.id === row.key)
+    if (existing) existing.qty += qty
+    else cart.value.push({ ...variantProduct.value, id: row.key, price: row.price, originalPrice: row.price, qty, stock: row.stock, color: row.color, size: row.size, codigoCor: row.codigoCor })
+  })
+  variantProduct.value = null
 }
 
 const updateQty = (id, amount) => {
   const item = cart.value.find(i => i.id === id)
   if (item) {
+    if (amount > 0 && item.qty + amount > (item.stock ?? 0)) return alert('Saldo insuficiente para esta cor e tamanho.')
     item.qty = Math.max(0, item.qty + amount)
     if (item.qty === 0) removeItem(id)
   }
@@ -272,6 +282,18 @@ onUnmounted(() => {
 </script>
 
 <template>
+  <div v-if="variantProduct" class="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl p-6 max-w-xl w-full max-h-[85vh] overflow-auto">
+      <div class="flex justify-between mb-4"><h2 class="font-bold">{{ variantProduct.name }}</h2><button @click="variantProduct = null" aria-label="Fechar"><X /></button></div>
+      <p class="text-sm text-slate-500 mb-4">Escolha a quantidade por cor e tamanho.</p>
+      <p v-if="!variantRows.length" class="text-slate-500">Produto sem saldo disponível.</p>
+      <div v-for="row in variantRows" :key="row.key" class="flex items-center justify-between gap-4 border-b py-3">
+        <div><strong>{{ row.color }} / {{ row.size }}</strong><p class="text-xs text-slate-500">Saldo: {{ availableStock(row) }} · R$ {{ row.price.toFixed(2) }}</p></div>
+        <input v-model.number="variantQuantities[row.key]" type="number" min="0" :max="availableStock(row)" step="1" :disabled="!availableStock(row)" :aria-label="`Quantidade ${row.color} ${row.size}`" class="border rounded-lg p-2 w-24" />
+      </div>
+      <button @click="confirmVariants" :disabled="!variantRows.length" class="mt-5 w-full bg-indigo-600 text-white rounded-xl p-3 disabled:opacity-50">Adicionar ao pedido</button>
+    </div>
+  </div>
   <div class="flex h-screen bg-slate-50 overflow-hidden font-sans">
     <div class="flex-1 flex flex-col min-w-0 relative">
       <!-- Banner de Pedidos Salvos -->
@@ -404,7 +426,7 @@ onUnmounted(() => {
               <div v-if="cart.length === 0" class="h-full flex flex-col items-center justify-center text-slate-300 italic text-sm">Sacola vazia</div>
               <div v-for="item in cart" :key="item.id" class="p-3 bg-slate-50/50 rounded-xl border border-slate-100 flex flex-col animate-in zoom-in">
                 <div class="flex justify-between items-start mb-2">
-                  <div><h4 class="text-xs font-bold text-slate-800">{{ item.name }}</h4><p class="text-[9px] text-slate-400">R$ {{ item.price.toFixed(2) }}</p></div>
+                  <div><h4 class="text-xs font-bold text-slate-800">{{ item.name }} · {{ item.color }} / {{ item.size }}</h4><p class="text-[9px] text-slate-400">R$ {{ item.price.toFixed(2) }}</p></div>
                   <button @click="removeItem(item.id)" class="text-red-300 hover:text-red-500"><Trash2 class="w-3.5 h-3.5" /></button>
                 </div>
                 <div class="flex justify-between items-center mt-1">
@@ -558,7 +580,7 @@ onUnmounted(() => {
         <div class="w-full border-y border-dashed border-slate-300 py-2 mb-2 space-y-1">
           <div class="flex justify-between font-bold"><span>ITEM</span><span>QTD</span><span>TOTAL</span></div>
           <div v-for="item in cart" :key="item.id" class="flex justify-between">
-            <span class="truncate max-w-[150px]">{{ item.name }}</span>
+            <span class="truncate max-w-[150px]">{{ item.name }} · {{ item.color }} / {{ item.size }}</span>
             <span>{{ item.qty }}</span>
             <span>{{ (item.price * item.qty).toFixed(2) }}</span>
           </div>

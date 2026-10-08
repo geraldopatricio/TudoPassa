@@ -39,6 +39,18 @@ const showCustomerSuggestions = ref(false)
 const shippingValue = ref(0)
 const calculatingShipping = ref(false)
 const pixData = ref(null)
+const generatingPix = ref(false)
+const checkingPayment = ref(false)
+const paymentMessage = ref('Aguardando pagamento. A confirmação é automática.')
+let paymentTimer
+const qrSource = computed(() => {
+  const image = pixData.value?.qrCode || ''
+  return image.startsWith('data:image/') ? image : `data:image/png;base64,${image}`
+})
+const selectedVariantIndex = ref(0)
+const selectedVariant = computed(() => selectedProduct.value?.variantes?.[selectedVariantIndex.value])
+watch(selectedVariantIndex, () => { quantitiesPerSize.value = {}; Object.keys(selectedVariant.value?.grade || {}).forEach(size => { quantitiesPerSize.value[size] = 0 }) })
+onUnmounted(() => clearTimeout(paymentTimer))
 
 // No Tracking do Cliente
 const trackingData = ref(null)
@@ -137,7 +149,7 @@ const totalFinal = computed(() => subtotalCart.value + shippingValue.value)
 
 const hasMultipleSizes = computed(() => {
   if (!selectedProduct.value) return false
-  const grade = selectedProduct.value.variantes?.[0]?.grade || {}
+  const grade = selectedVariant.value?.grade || {}
   return Object.keys(grade).filter(tam => grade[tam] > 0).length > 1
 })
 
@@ -251,12 +263,14 @@ const saveCustomerToDB = async () => {
 
 // --- PAGAMENTO E FINALIZAÇÃO ---
 const handlePayment = async () => {
+  if (generatingPix.value || pixData.value) return
   if (!customer.value.nome || !customer.value.email || shippingValue.value === 0) {
     alert("Preencha seus dados e aguarde o cálculo do frete!")
     return
   }
   
   try {
+    generatingPix.value = true
     // 1. Salva/Atualiza o cliente no banco
     await saveCustomerToDB()
 
@@ -275,7 +289,7 @@ const handlePayment = async () => {
 
     if (dataPix.success) {
       pixData.value = dataPix
-      trackingData.value = { status: 'Pagamento Aprovado' }
+      paymentMessage.value = 'Aguardando pagamento. A confirmação é automática.'
 
       // 3. NOVO: Salva o Pedido de Venda no Banco de Dados
       const pedidoPayload = {
@@ -305,16 +319,18 @@ const handlePayment = async () => {
         const pedidoJson = await pedidoRes.json()
         if (pedidoJson.success && pedidoJson.pedido?.id) {
           pixData.value.pedidoId = pedidoJson.pedido.id
+          paymentTimer = setTimeout(finishAndTrack, 5000)
           if (!['local', 'enviado'].includes(pedidoJson.pedido.integracao?.status)) alert('Pedido salvo. O envio à integração precisa de atenção; consulte os detalhes do pedido.')
         }
         console.log("Pedido salvo com sucesso no banco de dados!")
         
         // 4. Notifica por email (conforme seu código original)
-        await fetch(`${API_URL}/produtos/notificar-pedido`, {
+        const emailRes = await fetch(`${API_URL}/produtos/notificar-pedido`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(pedidoPayload)
+          body: JSON.stringify({ ...pedidoPayload, pedidoId: pixData.value.pedidoId })
         })
+        if (!emailRes.ok) alert('Pedido salvo e Pix gerado. Não foi possível enviar a cópia por e-mail.')
       }
 
     } else { 
@@ -322,13 +338,13 @@ const handlePayment = async () => {
     }
   } catch (e) { 
     console.error(e)
-    alert("Erro de conexão com o servidor.") 
-  }
+    alert(e.message || 'Erro de conexão com o servidor.')
+  } finally { generatingPix.value = false }
 }
 
 // --- LÓGICA DO PRODUTO E CARRINHO ---
 const openDetails = (p) => {
-  selectedProduct.value = p; selectedSize.value = null; selectedQty.value = 1; isGridMode.value = false;
+  selectedVariantIndex.value = 0; selectedProduct.value = p; selectedSize.value = null; selectedQty.value = 1; isGridMode.value = false;
   quantitiesPerSize.value = {};
   if (p.variantes?.[0]?.grade) {
     Object.keys(p.variantes[0].grade).forEach(tam => { quantitiesPerSize.value[tam] = 0; });
@@ -337,7 +353,8 @@ const openDetails = (p) => {
 }
 
 const handleAddToCart = () => {
-  const v = selectedProduct.value.variantes[0]
+  const v = selectedVariant.value
+  if (!v) return
   let itemsToAdd = []
   if (isGridMode.value) {
     Object.keys(v.grade).forEach(tam => {
@@ -345,7 +362,7 @@ const handleAddToCart = () => {
         itemsToAdd.push({
           cartId: Date.now() + Math.random(), referencia: selectedProduct.value.referencia,
           descricao: selectedProduct.value.descricao, imagem: selectedProduct.value.imagem,
-          codigoCor: v.codigo_cor, chosenSize: tam, chosenQty: selectedQty.value, unitPrice: v.valor_unitario, totalPrice: v.valor_unitario * selectedQty.value
+          chosenColor: v.cor_codigo_nome, codigoCor: v.codigo_cor, chosenSize: tam, chosenQty: selectedQty.value, unitPrice: v.valor_unitario, totalPrice: v.valor_unitario * selectedQty.value
         })
       }
     })
@@ -355,12 +372,13 @@ const handleAddToCart = () => {
         itemsToAdd.push({
           cartId: Date.now() + Math.random(), referencia: selectedProduct.value.referencia,
           descricao: selectedProduct.value.descricao, imagem: selectedProduct.value.imagem,
-          codigoCor: v.codigo_cor, chosenSize: tam, chosenQty: qty, unitPrice: v.valor_unitario, totalPrice: v.valor_unitario * qty
+          chosenColor: v.cor_codigo_nome, codigoCor: v.codigo_cor, chosenSize: tam, chosenQty: qty, unitPrice: v.valor_unitario, totalPrice: v.valor_unitario * qty
         })
       }
     })
   }
   if (itemsToAdd.length === 0) { alert("Selecione a quantidade!"); return; }
+  if (itemsToAdd.some(item => !Number.isSafeInteger(item.chosenQty) || item.chosenQty + cart.value.filter(i => i.referencia === item.referencia && i.chosenColor === item.chosenColor && i.chosenSize === item.chosenSize).reduce((n, i) => n + i.chosenQty, 0) > Number(v.grade[item.chosenSize]))) return alert('Quantidade superior ao saldo disponível para esta cor e tamanho.');
   cart.value.push(...itemsToAdd);
   localStorage.setItem('gp_cart', JSON.stringify(cart.value))
   currentStep.value = 'cart-summary'
@@ -403,21 +421,23 @@ const initMap = () => {
 // }
 
 const finishAndTrack = async () => {
-  if (pixData.value && pixData.value.pedidoId) {
-    try {
-      await fetch(`${API_URL}/pedidos/${pixData.value.pedidoId}/status`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'Pago' })
-      })
-    } catch (e) {
-      console.error('Erro ao confirmar pagamento:', e)
+  if (!pixData.value?.pedidoId || checkingPayment.value) return
+  clearTimeout(paymentTimer)
+  checkingPayment.value = true
+  try {
+    const res = await fetch(`${API_URL}/pedidos/${pixData.value.pedidoId}/status`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'Pago' })
+    })
+    const data = await res.json()
+    if (res.ok && data.status === 'Pago') {
+      cart.value = []; localStorage.removeItem('gp_cart')
+      await router.push(`/tracking/${pixData.value.pedidoId}`)
+      return
     }
-
-    router.push(`/tracking/${pixData.value.pedidoId}`)
-  } else {
-    alert('Não foi possível abrir o rastreamento. Tente novamente mais tarde.')
-  }
+    paymentMessage.value = data.message || 'Aguardando confirmação do pagamento.'
+  } catch { paymentMessage.value = 'Consulta indisponível. Tentaremos novamente automaticamente.' }
+  finally { checkingPayment.value = false }
+  paymentTimer = setTimeout(finishAndTrack, 10000)
 }
 
 const goToTracking = () => {
@@ -642,9 +662,13 @@ watch([allCustomers, currentUser], () => syncUserWithCustomer(), { immediate: tr
         <div class="w-16 h-1.5 bg-slate-100 rounded-full mx-auto mb-10"></div>
         
         <h2 class="text-2xl font-black text-slate-900 leading-tight uppercase mb-2">{{ selectedProduct.descricao }}</h2>
-        <p v-if="isLoggedIn" class="text-4xl font-black text-indigo-600 italic mb-10">R$ {{ selectedProduct.variantes?.[0]?.valor_unitario?.toFixed(2) }}</p>
+        <p v-if="isLoggedIn" class="text-4xl font-black text-indigo-600 italic mb-10">R$ {{ selectedVariant?.valor_unitario?.toFixed(2) }}</p>
         <button v-else @click="showLoginModal = true" class="mb-10 text-xs font-black uppercase text-indigo-600">Entre para ver o preço</button>
 
+        <label class="block text-sm font-bold mb-2">Cor</label>
+        <select v-model="selectedVariantIndex" class="w-full border rounded-xl p-3 mb-6">
+          <option v-for="(variant, index) in selectedProduct.variantes" :key="index" :value="index">{{ variant.cor_codigo_nome || variant.codigo_cor || 'Sem cor' }}</option>
+        </select>
         <!-- TOGGLE MODO GRADE -->
         <div v-if="hasMultipleSizes" class="flex items-center justify-between bg-indigo-50 p-6 rounded-[2.5rem] mb-10 border border-indigo-100 shadow-sm">
             <div class="flex items-center gap-4">
@@ -676,7 +700,7 @@ watch([allCustomers, currentUser], () => syncUserWithCustomer(), { immediate: tr
         <!-- SELETOR: MODO INDIVIDUAL (LISTA POR TAMANHO) -->
         <div v-else class="space-y-4 mb-10">
             <h4 class="font-black text-[11px] uppercase tracking-widest text-slate-400 mb-2">Selecione as quantidades</h4>
-            <div v-for="(estoque, tam) in selectedProduct.variantes?.[0]?.grade" :key="tam" 
+            <div v-for="(estoque, tam) in selectedVariant?.grade" :key="tam"
                  class="flex items-center justify-between p-5 bg-slate-50 rounded-[2rem] border border-slate-100"
                  :class="estoque === 0 ? 'opacity-40 grayscale' : ''">
                 
@@ -733,7 +757,7 @@ watch([allCustomers, currentUser], () => syncUserWithCustomer(), { immediate: tr
                 <img :src="`${IMAGE_BASE}/${item.imagem}`" class="w-20 h-20 rounded-[1.5rem] object-cover">
                 <div class="flex-1">
                     <h4 class="font-black text-xs text-slate-800 line-clamp-1 uppercase">{{ item.descricao }}</h4>
-                    <p class="text-[10px] font-black text-indigo-600 mt-1">TAM: {{ item.chosenSize }} | QTD: {{ item.chosenQty }}</p>
+                    <p class="text-[10px] font-black text-indigo-600 mt-1">COR: {{ item.chosenColor || item.codigoCor }} | TAM: {{ item.chosenSize }} | QTD: {{ item.chosenQty }}</p>
                     <p v-if="isLoggedIn" class="text-lg font-black text-slate-900">R$ {{ item.totalPrice.toFixed(2) }}</p>
                 </div>
                 <button @click="removeFromCart(item.cartId)" class="p-3 bg-red-50 text-red-500 rounded-xl">
@@ -872,25 +896,26 @@ watch([allCustomers, currentUser], () => syncUserWithCustomer(), { immediate: tr
         <!-- Se PIX Gerado -->
         <div v-if="pixData" class="bg-white p-6 rounded-3xl text-center mb-6 animate-in zoom-in">
           <p class="text-slate-400 font-black text-[9px] uppercase mb-4">Escaneie o QR Code abaixo</p>
-          <img :src="`data:image/png;base64,${pixData.qrCode}`" class="w-48 mx-auto mb-4 rounded-xl shadow-md border-4 border-slate-50">
+          <img :src="qrSource" alt="QR Code Pix do Asaas" class="w-48 mx-auto mb-4 rounded-xl shadow-md border-4 border-slate-50">
 
           <!-- Copia e cola do PIX -->
-          <div class="mt-2 bg-slate-50 p-3 rounded-xl border border-slate-100 text-xs font-mono text-slate-700 flex items-center justify-between gap-3">
-            <div class="truncate text-left mr-2">{{ pixData.copyPaste }}</div>
+          <div class="mt-2 bg-slate-50 p-3 rounded-xl border border-dashed border-emerald-500 text-xs font-mono text-slate-700 flex items-center justify-between gap-3">
+            <div class="break-all whitespace-pre-wrap text-left min-w-0">{{ pixData.copyPaste }}</div>
             <button @click="copyPix" class="ml-2 bg-indigo-600 text-white px-3 py-2 rounded-xl text-[11px] font-black">Copiar</button>
           </div>
 
-          <button @click="finishAndTrack" class="w-full mt-4 bg-emerald-500 text-white py-4 rounded-xl font-black uppercase text-xs shadow-lg shadow-emerald-200">
+          <p class="text-sm text-slate-600 mt-4" role="status">{{ paymentMessage }}</p>
+          <button :disabled="checkingPayment" @click="finishAndTrack" class="w-full mt-4 bg-emerald-500 text-white py-4 rounded-xl font-black uppercase text-xs shadow-lg shadow-emerald-200">
             JÁ PAGUEI, VERIFICAR
           </button>
         </div>
 
         <!-- Botão Gerar -->
         <button v-else @click="handlePayment" 
-                :disabled="calculatingShipping || shippingValue === 0 || !customer.endereco" 
+                :disabled="generatingPix || calculatingShipping || shippingValue === 0 || !customer.endereco"
                 class="w-full bg-white text-indigo-600 py-5 rounded-[1.5rem] font-black uppercase text-sm disabled:opacity-50 active:scale-95 transition-all flex items-center justify-center gap-3">
             <QrCode v-if="!calculatingShipping" class="w-5 h-5" />
-            {{ calculatingShipping ? 'CALCULANDO FRETE...' : 'GERAR PIX AGORA' }}
+            {{ generatingPix ? 'GERANDO PIX...' : calculatingShipping ? 'CALCULANDO FRETE...' : 'GERAR PIX AGORA' }}
         </button>
     </div>
 </div>
