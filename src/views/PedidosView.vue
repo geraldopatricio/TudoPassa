@@ -1,5 +1,8 @@
 <script setup>
 import { ref, onMounted, computed, watch } from 'vue'
+import OrderPix from '../components/OrderPix.vue'
+import { QrCode } from 'lucide-vue-next'
+const pixOrderId = ref(null)
 import { 
   Search, Eye, Pencil, Trash2, Printer, X, Save, 
   ChevronLeft, ChevronRight, Loader2, Package, 
@@ -11,6 +14,8 @@ const usuarioLogado = JSON.parse(localStorage.getItem('usuario') || '{}')
 // --- CONFIGURAÇÕES DE CONEXÃO ---
 const BASE_URL = import.meta.env.VITE_API_URL || '/api';
 const API_URL = `${BASE_URL}/pedidos`;
+const CLIENTES_API = `${BASE_URL}/clientes`;
+const PROFISSIONAIS_API = `${BASE_URL}/profissionais`;
 const IMAGE_BASE = `${BASE_URL}/uploads/produtos`;
 
 const pedidos = ref([])
@@ -119,7 +124,9 @@ const fetchDadosIniciais = async () => {
 const filteredPedidos = computed(() => {
   if (!Array.isArray(pedidos.value)) return []
   
-  let listaFiltrada = [...pedidos.value]
+  let listaFiltrada = [...pedidos.value].reverse().sort((a, b) =>
+    (Date.parse(b.data) || 0) - (Date.parse(a.data) || 0)
+  )
 
   // REGRA PARA CLIENTE: Vê apenas pedidos vinculados ao seu CPF
   if (usuarioLogado.tipo === 'Cliente') {
@@ -163,7 +170,7 @@ const filteredPedidos = computed(() => {
     const matchSearch = p.cliente_nome.toLowerCase().includes(searchQuery.value.toLowerCase()) || 
                         p.numero_pedido.toString().includes(searchQuery.value)
     const matchStatus = filterStatus.value === 'TODOS' || p.status === filterStatus.value
-    return matchSearch && matchStatus
+    return !p.em_financeiro && matchSearch && matchStatus
   })
 })
 
@@ -172,7 +179,11 @@ const paginatedPedidos = computed(() => {
   return filteredPedidos.value.slice(start, start + itemsPerPage.value)
 })
 
-const totalPages = computed(() => Math.ceil(filteredPedidos.value.length / itemsPerPage.value))
+const totalPages = computed(() => Math.max(1, Math.ceil(filteredPedidos.value.length / itemsPerPage.value)))
+const firstVisible = computed(() => filteredPedidos.value.length ? (currentPage.value - 1) * itemsPerPage.value + 1 : 0)
+const lastVisible = computed(() => Math.min(currentPage.value * itemsPerPage.value, filteredPedidos.value.length))
+watch([searchQuery, filterStatus, itemsPerPage], () => { currentPage.value = 1 })
+watch(totalPages, pages => { currentPage.value = Math.min(currentPage.value, pages) })
 
 const getStatusColor = (status) => {
   const colors = {
@@ -184,7 +195,6 @@ const getStatusColor = (status) => {
   return colors[status] || 'bg-slate-100 text-slate-500'
 }
 
-onMounted(fetchPedidos)
 onMounted(fetchDadosIniciais)
 </script>
 
@@ -233,6 +243,9 @@ onMounted(fetchDadosIniciais)
                 <tr v-if="loading">
                   <td colspan="6" class="py-20 text-center"><Loader2 class="w-8 h-8 animate-spin mx-auto text-indigo-500" /></td>
                 </tr>
+                <tr v-if="!loading && !filteredPedidos.length">
+                  <td colspan="6" class="py-12 text-center text-sm text-slate-500">Nenhum pedido encontrado.</td>
+                </tr>
                 <tr v-for="p in paginatedPedidos" :key="p.id" class="hover:bg-slate-50/50 transition-colors">
                   <td class="px-6 py-4 font-black text-slate-700">#{{ String(p.numero_pedido).padStart(4, '0') }}</td>
                   <td class="px-6 py-4">
@@ -251,6 +264,7 @@ onMounted(fetchDadosIniciais)
                   <td class="px-6 py-4">
                     <div class="flex justify-center gap-2">
                       <button @click="openDetails(p)" class="p-2 text-indigo-500 hover:bg-indigo-50 rounded-lg"><Eye class="w-4 h-4"/></button>
+                      <button @click="pixOrderId = p.id" title="Consultar ou gerar Pix" aria-label="Consultar ou gerar Pix" class="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg"><QrCode class="w-4 h-4" /></button>
                       <button v-if="usuarioLogado.tipo !== 'Cliente'" @click="deletePedido(p.id)" class="p-2 text-red-300 hover:bg-red-50 rounded-lg"><Trash2 class="w-4 h-4"/></button>
                     </div>
                   </td>
@@ -258,10 +272,31 @@ onMounted(fetchDadosIniciais)
               </tbody>
             </table>
           </div>
+          <div class="flex flex-wrap items-center justify-between gap-4 border-t border-slate-100 px-6 py-4 text-sm text-slate-600">
+            <div class="flex flex-wrap items-center gap-4">
+              <span>{{ firstVisible }}–{{ lastVisible }} de {{ filteredPedidos.length }} pedidos</span>
+              <label class="flex items-center gap-2">Por página
+                <select v-model.number="itemsPerPage" class="border border-slate-200 rounded-lg px-2 py-1" :disabled="loading">
+                  <option :value="10">10</option><option :value="20">20</option><option :value="50">50</option>
+                </select>
+              </label>
+            </div>
+            <nav aria-label="Paginação de pedidos" class="flex items-center gap-3">
+              <button @click="currentPage--" :disabled="loading || currentPage <= 1" class="flex items-center gap-1 rounded-lg border px-3 py-2 disabled:opacity-40"><ChevronLeft class="w-4 h-4" /> Anterior</button>
+              <span aria-live="polite">Página {{ currentPage }} de {{ totalPages }}</span>
+              <button @click="currentPage++" :disabled="loading || currentPage >= totalPages" class="flex items-center gap-1 rounded-lg border px-3 py-2 disabled:opacity-40">Próxima <ChevronRight class="w-4 h-4" /></button>
+            </nav>
+          </div>
         </div>
       </main>
     </div>
 
+    <div v-if="pixOrderId" class="fixed inset-0 z-[110] bg-slate-900/60 flex items-center justify-center p-4">
+      <div role="dialog" aria-modal="true" aria-label="Pix do pedido" class="bg-white rounded-2xl p-6 w-full max-w-lg max-h-[90vh] overflow-auto">
+        <button @click="pixOrderId = null" class="float-right" aria-label="Fechar Pix"><X /></button>
+        <OrderPix :pedido-id="pixOrderId" @paid="fetchPedidos" />
+      </div>
+    </div>
     <!-- MODAL DETALHES DO PEDIDO -->
     <div v-if="isModalOpen" class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
       <div class="bg-white w-full max-w-4xl rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in">

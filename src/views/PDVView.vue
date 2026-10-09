@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import Footer from '../components/Footer.vue'
+import OrderPix from '../components/OrderPix.vue'
 import { 
   Search, Trash2, Plus, Minus, ChevronDown, UserPlus, CreditCard, X, Save,
   Mouse, Keyboard, Monitor, Printer, Smartphone, HardDrive, Cpu, Laptop,
@@ -29,6 +30,9 @@ const isFinalizeChoiceOpen = ref(false)
 const isReceiptModalOpen = ref(false)
 const receiptType = ref('non-fiscal') 
 const paymentLines = ref([])
+const savingSale = ref(false)
+const completedOrder = ref(null)
+const saleRequestId = ref(crypto.randomUUID())
 
 // --- NOVOS ESTADOS PARA CLIENTES ---
 const allCustomers = ref([])
@@ -205,19 +209,61 @@ const openSplitModal = () => {
 }
 
 const openFinalizeChoice = () => {
+  if (savingSale.value || completedOrder.value) return
+  if (!isSplitModalOpen.value) paymentLines.value = [{ method: paymentMethod.value, value: totalFinal.value, installments: 1 }]
   isSplitModalOpen.value = false
   isFinalizeChoiceOpen.value = true
 }
 
 const resetSale = () => {
+  if (savingSale.value) return
   cart.value = []
   discountValue.value = 0
   feeValue.value = 0
   isFinalizeChoiceOpen.value = false
   isReceiptModalOpen.value = false
+  completedOrder.value = null
+  saleRequestId.value = crypto.randomUUID()
+  paymentLines.value = []
+}
+
+const finalizeSale = async (type = null) => {
+  if (savingSale.value || !cart.value.length) return
+  if (completedOrder.value) {
+    if (type) { receiptType.value = type; isReceiptModalOpen.value = true }
+    else resetSale()
+    return
+  }
+  const customer = allCustomers.value.find(c => c.nome === selectedCustomer.value)
+  if (!customer) return alert('Selecione um cliente cadastrado para finalizar a venda.')
+  savingSale.value = true
+  try {
+    const pagamentos = paymentLines.value.length ? paymentLines.value : [{ method: paymentMethod.value, value: totalFinal.value, installments: 1 }]
+    const response = await fetch(`${API_URL}/pedidos/pdv`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        requestId: saleRequestId.value,
+        cliente: { codigo: customer.codigo, nome: customer.nome, cpf: customer.cpf_cnpj, email: customer.email, whatsapp: customer.celular, endereco: customer.endereco },
+        itens: cart.value.map(item => ({ referencia: item.code, descricao: item.name, codigoCor: item.codigoCor, chosenColor: item.color, chosenSize: item.size, chosenQty: item.qty, unitPrice: item.price, totalPrice: item.price * item.qty })),
+        subtotal: subtotal.value, frete: 0, desconto: calculatedDiscount.value, taxas: calculatedFee.value, total: totalFinal.value,
+        pagamentos, tipoCupom: type || 'sem-cupom'
+      })
+    })
+    const result = await response.json()
+    if (!response.ok || !result.success || !result.pedido?.id) throw new Error(result.message || 'Não foi possível salvar a venda.')
+    completedOrder.value = result.pedido
+    if (result.pedido.email?.status === 'erro') alert(`Pedido salvo, mas o e-mail não foi enviado: ${result.pedido.email.mensagem}`)
+    isFinalizeChoiceOpen.value = false
+    isSplitModalOpen.value = false
+    receiptType.value = type || 'non-fiscal'
+    isReceiptModalOpen.value = true
+    await fetchProducts()
+  } catch (error) { alert(error.message || 'Falha ao salvar a venda. O carrinho foi mantido.') }
+  finally { savingSale.value = false }
 }
 
 const saveForLater = () => {
+  if (savingSale.value || completedOrder.value) return
   if (cart.value.length === 0) return
   savedOrders.value.push({
     id: Date.now(),
@@ -252,9 +298,7 @@ const restoreOrder = (order) => {
 }
 
 const printReceipt = (type) => {
-  if (cart.value.length === 0) return
-  receiptType.value = type
-  isReceiptModalOpen.value = true
+  finalizeSale(type)
 }
 
 // --- TECLAS DE ATALHO ---
@@ -262,7 +306,7 @@ const handleShortcuts = (event) => {
   if (['F1', 'F2', 'F3', 'F4'].includes(event.key)) {
     event.preventDefault()
     if (cart.value.length === 0) return
-    if (event.key === 'F1') resetSale()
+    if (event.key === 'F1') finalizeSale()
     if (event.key === 'F2') printReceipt('non-fiscal')
     if (event.key === 'F3') printReceipt('fiscal')
     if (event.key === 'F4') saveForLater()
@@ -301,7 +345,7 @@ onUnmounted(() => {
         <AlertCircle class="w-3.5 h-3.5" /> Clique no sino para recuperar pedidos salvos
       </div>
 
-      <main class="flex-1 flex flex-col lg:flex-row overflow-hidden p-4 md:p-6 gap-6">
+      <main :inert="savingSale || !!completedOrder" class="flex-1 flex flex-col lg:flex-row overflow-hidden p-4 md:p-6 gap-6">
         
         <!-- COLUNA ESQUERDA: PRODUTOS -->
         <section class="flex-1 overflow-y-auto custom-scrollbar flex flex-col">
@@ -547,13 +591,13 @@ onUnmounted(() => {
           <button @click="isFinalizeChoiceOpen = false" class="p-1 hover:bg-slate-100 rounded-lg"><X class="w-5 h-5 text-slate-400" /></button>
         </div>
         <div class="p-6 space-y-3">
-          <button @click="resetSale" class="w-full py-4 bg-[#1b8542] hover:bg-[#156e36] text-white rounded-2xl flex items-center justify-center gap-3 font-bold transition-all shadow-md active:scale-95">
+          <button @click="finalizeSale()" :disabled="savingSale" class="w-full py-4 bg-[#1b8542] hover:bg-[#156e36] text-white rounded-2xl flex items-center justify-center gap-3 font-bold transition-all shadow-md active:scale-95">
             <CheckCircle class="w-5 h-5" /> Finalizar Pedido <span class="text-[10px] opacity-60 ml-1 font-mono">[F1]</span>
           </button>
-          <button @click="printReceipt('non-fiscal')" class="w-full py-4 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-2xl flex items-center justify-center gap-3 font-bold transition-all active:scale-95">
+          <button @click="printReceipt('non-fiscal')" :disabled="savingSale" class="w-full py-4 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-2xl flex items-center justify-center gap-3 font-bold transition-all active:scale-95">
             <Printer class="w-5 h-5" /> Cupom Não Fiscal <span class="text-[10px] opacity-40 ml-1 font-mono">[F2]</span>
           </button>
-          <button @click="printReceipt('fiscal')" class="w-full py-4 bg-slate-50/50 border border-slate-100 hover:bg-slate-100 text-slate-700 rounded-2xl flex items-center justify-center gap-3 font-bold transition-all active:scale-95">
+          <button @click="printReceipt('fiscal')" :disabled="savingSale" class="w-full py-4 bg-slate-50/50 border border-slate-100 hover:bg-slate-100 text-slate-700 rounded-2xl flex items-center justify-center gap-3 font-bold transition-all active:scale-95">
             <FileText class="w-5 h-5" /> Cupom Fiscal <span class="text-[10px] opacity-40 ml-1 font-mono">[F3]</span>
           </button>
           <button @click="saveForLater" class="w-full py-4 bg-white border-2 border-blue-400 hover:bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center gap-3 font-bold transition-all active:scale-95">
@@ -574,7 +618,8 @@ onUnmounted(() => {
         </div>
         <div class="w-full mb-4 space-y-0.5">
           <p class="font-bold">CLIENTE: <span class="font-normal uppercase">{{ selectedCustomer }}</span></p>
-          <p class="font-bold">DATA: <span class="font-normal">{{ new Date().toLocaleString() }}</span></p>
+          <p class="font-bold">PEDIDO: <span class="font-normal">#{{ completedOrder?.numero_pedido }}</span></p>
+          <p class="font-bold">DATA: <span class="font-normal">{{ new Date(completedOrder?.data || Date.now()).toLocaleString() }}</span></p>
           <p class="font-bold">DOC: <span class="font-normal">{{ receiptType === 'fiscal' ? 'CUPOM FISCAL' : 'CUPOM NÃO FISCAL' }}</span></p>
         </div>
         <div class="w-full border-y border-dashed border-slate-300 py-2 mb-2 space-y-1">
@@ -595,13 +640,7 @@ onUnmounted(() => {
           <p class="font-bold">PAGAMENTO: <span class="font-normal">{{ paymentMethod }}</span></p>
           <p v-if="changeAmount > 0" class="flex justify-between text-emerald-600 font-bold"><span>TROCO</span><span>R$ {{ changeAmount.toFixed(2) }}</span></p>
         </div>
-        <!-- Bloco QR Code -->
-        <div v-if="receiptType === 'fiscal'" class="flex flex-col items-center gap-2 mb-6 w-full">
-          <div class="w-24 h-24 bg-white border p-1 flex items-center justify-center">
-             <svg viewBox="0 0 100 100" class="w-full h-full fill-slate-800"><path d="M0 0h40v40H0V0zm10 10v20h20V10H10zM60 0h40v40H60V0zm10 10v20h20V10H70zM0 60h40v40H0V60zm10 10v20h20V70H10zM60 60h10v10H60V60zm30 0h10v10H90V60zm-20 10h10v10H70V70zm20 0h10v10H90V70zm-20 10h10v10H70V80zm10 10h10v10H80V90zm10-10h10v10H90V80z"/></svg>
-          </div>
-          <p class="text-[8px] text-center text-slate-400">Consulte via QR Code em {{ company.site }}</p>
-        </div>
+        <OrderPix v-if="completedOrder" :pedido-id="completedOrder.id" class="mb-6" />
         <button @click="resetSale" class="w-full py-3 bg-slate-800 text-white rounded-lg font-bold print:hidden">Fechar e Novo Atendimento</button>
       </div>
     </div>

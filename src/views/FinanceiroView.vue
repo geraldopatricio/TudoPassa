@@ -1,6 +1,22 @@
 <script setup>
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { Printer, RefreshCw, Loader2 } from 'lucide-vue-next'
+import { QrCode, X } from 'lucide-vue-next'
+import OrderPix from '../components/OrderPix.vue'
+const pixOrderId = ref(null)
+const pixEntry = ref(null)
+const reversing = ref(null)
+const reverseEntry = async item => {
+  if (reversing.value || !confirm('Estornar este lançamento e devolver o pedido para Pedidos? Este estorno é interno; não devolve dinheiro no Asaas.')) return
+  reversing.value = item.id
+  try {
+    const response = await fetch(`${BASE_URL}/financeiro/${item.id}/estorno`, { method: 'POST' })
+    const result = await response.json()
+    if (!response.ok) throw new Error(result.message || 'Não foi possível estornar.')
+    pixOrderId.value = null
+    await fetchEntries()
+  } catch (e) { alert(e.message) } finally { reversing.value = null }
+}
 const BASE_URL = import.meta.env.VITE_API_URL || '/api'
 const entries = ref([]), loading = ref(true), error = ref('')
 const dayKey = value => {
@@ -108,7 +124,7 @@ onMounted(fetchEntries)
               <td><strong>{{ dateLabel(dayKey(entryDate(item))) }}</strong><span>{{ item.numero_pedido != null ? `Pedido #${item.numero_pedido}` : 'Lançamento manual' }}</span><small>{{ item.id }}</small></td>
               <td><strong>{{ item.cliente_nome || 'Cliente não informado' }}</strong><span>{{ item.tipo_movimento || 'Entrada financeira' }}</span><small v-if="item.cliente_cpf">CPF/CNPJ: {{ item.cliente_cpf }}</small><small v-if="item.observacoes" class="entry-note">{{ item.observacoes }}</small><small>Emissão: {{ dateLabel(dayKey(item.data_emissao)) }} · Vencimento: {{ dateLabel(dayKey(item.data_vencimento)) }}</small></td>
               <td><strong>{{ item.forma_pagamento || 'Não informado' }}</strong><span>{{ item.conta_financeira || 'Conta não informada' }}</span><small>Parcela {{ item.parcela || '—' }}</small></td>
-              <td><span class="status-pill" :class="item.situacao === 'Recebido' ? 'received' : item.situacao === 'Cancelado' ? 'cancelled' : 'pending'">{{ item.situacao || 'Em aberto' }}</span></td>
+              <td><span class="status-pill" :class="item.situacao === 'Recebido' ? 'received' : item.situacao === 'Cancelado' ? 'cancelled' : 'pending'">{{ item.situacao || 'Em aberto' }}</span><button @click="pixEntry = item; pixOrderId = item.id" title="Consultar ou gerar Pix" aria-label="Consultar ou gerar Pix" class="screen-only mt-2 text-emerald-600 disabled:opacity-30"><QrCode class="w-5 h-5" /></button><button v-if="item.id_pedido" @click="reverseEntry(item)" :disabled="!!reversing" class="screen-only block mt-2 text-sm text-amber-700 underline disabled:opacity-50">{{ reversing === item.id ? 'Estornando...' : 'Estornar para pedido' }}</button></td>
               <td class="amount">{{ money(item.valor_original ?? item.valor_liquido) }}</td><td class="amount font-bold" :class="item.situacao === 'Recebido' ? 'text-emerald-700' : 'text-slate-600'">{{ money(item.valor_liquido) }}</td>
             </tr>
           </tbody>
@@ -121,6 +137,12 @@ onMounted(fetchEntries)
       </section>
       <p class="text-xs text-slate-500 mt-5 report-footnote">Relatório de entradas da plataforma. Os totais refletem os filtros acima e não representam saldo bancário. Lançamentos cancelados não compõem os totais recebidos ou a receber.</p>
     </article>
+    <div v-if="pixOrderId" class="screen-only fixed inset-0 z-[110] bg-slate-900/60 flex items-center justify-center p-4">
+      <div role="dialog" aria-modal="true" aria-label="Pix do lançamento" class="bg-white rounded-2xl p-6 w-full max-w-lg max-h-[90vh] overflow-auto">
+        <button @click="pixOrderId = null" class="float-right" aria-label="Fechar Pix"><X /></button>
+        <OrderPix :pedido-id="pixEntry?.id_pedido" :financeiro-id="pixEntry?.id" @paid="fetchEntries" />
+      </div>
+    </div>
   </main>
 </template>
 
