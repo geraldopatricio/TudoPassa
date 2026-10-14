@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, computed, watch, onUnmounted } from 'vue'
 import { 
   Search, Plus, Pencil, Trash2, Download, Upload, X, Save, 
   Image as ImageIcon, PlusCircle, ChevronLeft, ChevronRight, Loader2
@@ -22,7 +22,10 @@ const isSidebarOpen = ref(false)
 const isModalOpen = ref(false)
 const editingProduto = ref(null)
 const fileInput = ref(null)
-const imagePreview = ref(null)
+const photos = ref([])
+const saving = ref(false)
+const releasePhotos = () => photos.value.forEach(photo => { if (photo.file) URL.revokeObjectURL(photo.url) })
+onUnmounted(releasePhotos)
 const form = ref({
   referencia: '',
   categoria: 'CAMISA',
@@ -138,22 +141,35 @@ watch(searchQuery, () => { currentPage.value = 1 })
 
 // --- FUNÇÕES DE CRUD ---
 const openModal = (produto = null) => {
+  releasePhotos()
+  photos.value = []
   if (produto) {
     editingProduto.value = produto
     form.value = JSON.parse(JSON.stringify(produto))
-    imagePreview.value = `${IMAGE_BASE}/${produto.imagem}`
+    form.value.venda_externa = produto.venda_externa === true
+    photos.value = (Array.isArray(produto.imagens) ? produto.imagens : (produto.imagem && produto.imagem !== 'avatar.png' ? [produto.imagem] : [])).map(name => ({ name, url: `${IMAGE_BASE}/${name}` }))
   } else {
     editingProduto.value = null
-    form.value = { referencia: '', categoria: 'CAMISA', descricao: '', unidade: 'UN', variantes: [] }
-    imagePreview.value = null
+    form.value = { referencia: '', categoria: 'CAMISA', descricao: '', unidade: 'UN', variantes: [], venda_externa: false }
+
   }
   isModalOpen.value = true
 }
 
 const handleImageChange = (e) => {
-  const file = e.target.files[0]
-  if (file) imagePreview.value = URL.createObjectURL(file)
+  const files = Array.from(e.target.files || [])
+  if (photos.value.length + files.length > 6) { alert('Cada produto pode ter até 6 fotos.'); e.target.value = ''; return }
+  if (files.some(file => !/^image\/(jpeg|png|webp|gif|avif)$/.test(file.type) || file.size > 8 * 1024 * 1024)) {
+    alert('Envie imagens JPG, PNG, WebP, GIF ou AVIF de até 8 MB.'); e.target.value = ''; return
+  }
+  photos.value.push(...files.map(file => ({ file, url: URL.createObjectURL(file) })))
+  e.target.value = ''
 }
+const removePhoto = index => {
+  const [photo] = photos.value.splice(index, 1)
+  if (photo.file) URL.revokeObjectURL(photo.url)
+}
+const makePrimary = index => { photos.value.unshift(...photos.value.splice(index, 1)) }
 
 const addVariante = () => {
   form.value.variantes.push({
@@ -184,17 +200,19 @@ const calcularTotaisVariante = (v) => {
 }
 
 const saveProduto = async () => {
+  if (saving.value) return
+  saving.value = true
   const formData = new FormData()
   formData.append('referencia', form.value.referencia)
   formData.append('categoria', form.value.categoria)
   formData.append('descricao', form.value.descricao)
   formData.append('unidade', form.value.unidade)
   formData.append('variantes', JSON.stringify(form.value.variantes))
-  if (form.value.imagem) formData.append('imagem', form.value.imagem)
-  
-  if (fileInput.value?.files[0]) {
-    formData.append('imagem', fileInput.value.files[0])
-  }
+  formData.append('venda_externa', String(form.value.venda_externa === true))
+  formData.append('imagens_existentes', JSON.stringify(photos.value.filter(p => !p.file).map(p => p.name)))
+  const newPhotos = photos.value.filter(p => p.file)
+  newPhotos.forEach(p => formData.append('imagens', p.file))
+  formData.append('ordem_imagens', JSON.stringify(photos.value.map(p => p.file ? newPhotos.indexOf(p) : p.name)))
 
   const method = editingProduto.value ? 'PUT' : 'POST'
   const url = editingProduto.value ? `${API_URL}/${editingProduto.value.referencia}` : API_URL
@@ -205,10 +223,18 @@ const saveProduto = async () => {
       await fetchProdutos()
       isModalOpen.value = false
     } else {
-      const err = await res.json()
-      alert(err.message)
+      const responseText = await res.text()
+      let message
+      try { message = JSON.parse(responseText).message } catch { /* O proxy pode retornar texto ou HTML. */ }
+      if (!message && responseText.includes('Unexpected field')) {
+        message = 'O servidor ainda está com a versão antiga do cadastro. Reinicie o backend para habilitar as 6 fotos.'
+      }
+      alert(message || `Não foi possível salvar o produto (HTTP ${res.status}). Verifique o servidor e tente novamente.`)
     }
-  } catch (e) { alert("Erro ao conectar com o servidor") }
+  } catch (e) {
+    console.error('Erro ao salvar produto:', e)
+    alert('Não foi possível conectar ao servidor. Verifique se o backend está em execução e tente novamente.')
+  } finally { saving.value = false }
 }
 
 const deleteProduto = async (ref) => {
@@ -370,17 +396,26 @@ onMounted(fetchProdutos)
           <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
             <!-- Imagem no Modal -->
             <div class="space-y-4">
-              <div class="aspect-square bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden relative group">
-                <img v-if="imagePreview" :src="imagePreview" class="w-full h-full object-cover">
-                <ImageIcon v-else class="w-12 h-12 text-slate-200" />
-                <label class="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white cursor-pointer transition-all">
-                  <Upload class="w-6 h-6 mr-2" /> {{ editingProduto ? 'Trocar Foto' : 'Subir Foto' }}
-                  <input type="file" ref="fileInput" class="hidden" @change="handleImageChange" accept="image/*">
-                </label>
+              <p class="text-sm font-bold text-slate-700">Fotos do produto · {{ photos.length }}/6</p>
+              <div class="grid grid-cols-2 gap-3">
+                <div v-for="(photo, index) in photos" :key="photo.url" class="relative rounded-2xl border border-slate-200 overflow-hidden bg-slate-50">
+                  <img :src="photo.url" :alt="`Foto ${index + 1}`" class="aspect-square w-full object-cover" />
+                  <button type="button" @click="removePhoto(index)" aria-label="Remover foto" class="absolute top-1 right-1 p-1 rounded-full bg-white shadow"><X class="w-4 h-4" /></button>
+                  <button type="button" @click="makePrimary(index)" class="w-full p-2 text-xs font-bold" :class="index === 0 ? 'bg-indigo-600 text-white' : 'text-indigo-600 bg-white'">{{ index === 0 ? 'Foto principal' : 'Tornar principal' }}</button>
+                </div>
               </div>
+              <label v-if="photos.length < 6" class="flex items-center justify-center gap-2 p-4 border-2 border-dashed border-indigo-200 rounded-2xl cursor-pointer text-indigo-600 text-sm font-bold">
+                <Upload class="w-5 h-5" /> Adicionar fotos
+                <input type="file" ref="fileInput" class="hidden" multiple @change="handleImageChange" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" />
+              </label>
+              <p class="text-xs text-slate-400">At? 6 fotos, com até 8 MB cada. A principal aparece na vitrine.</p>
             </div>
 
             <div class="md:col-span-2 grid grid-cols-2 gap-4">
+              <label class="col-span-2 flex items-center gap-3 p-4 rounded-2xl bg-indigo-50 border border-indigo-100 cursor-pointer">
+                <input type="checkbox" v-model="form.venda_externa" class="w-5 h-5 accent-indigo-600" />
+                <span><span class="block font-bold text-sm text-slate-800">Disponível para venda no ecommerce</span><span class="text-xs text-slate-500">Marque para exibir este produto na loja externa.</span></span>
+              </label>
               <div class="col-span-2 space-y-1"><label class="text-[10px] font-black uppercase text-slate-400 ml-1">Descrição</label><input v-model="form.descricao" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-indigo-500"></div>
               <div class="space-y-1"><label class="text-[10px] font-black uppercase text-slate-400 ml-1">Referência</label><input v-model="form.referencia" :disabled="editingProduto" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-indigo-500"></div>
               <div class="space-y-1"><label class="text-[10px] font-black uppercase text-slate-400 ml-1">Categoria</label>
@@ -445,7 +480,7 @@ onMounted(fetchProdutos)
 
         <div class="p-8 bg-slate-50 border-t border-slate-100 flex gap-3">
           <button @click="isModalOpen = false" class="flex-1 py-4 font-bold text-slate-500 hover:bg-white rounded-2xl transition-all">Sair</button>
-          <button @click="saveProduto" class="flex-[2] py-4 bg-indigo-600 text-white font-black uppercase tracking-widest rounded-2xl shadow-lg flex items-center justify-center gap-2">
+          <button :disabled="saving" @click="saveProduto" class="flex-[2] py-4 bg-indigo-600 text-white font-black uppercase tracking-widest rounded-2xl shadow-lg flex items-center justify-center gap-2">
             <Save class="w-5 h-5" /> Salvar Alterações
           </button>
         </div>

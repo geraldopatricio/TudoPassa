@@ -1,5 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, nextTick, watch, onUnmounted } from 'vue'
+import ProductGallery from '../components/ProductGallery.vue'
+import { productPhotos } from '../utils/productPhotos'
 import { useRouter } from 'vue-router'
 import { 
   Search, ShoppingBag, Heart, ChevronLeft, Star, 
@@ -21,6 +23,8 @@ const loading = ref(true)
 // Seleção de Produto e UI
 const selectedProduct = ref(null)
 const isZoomed = ref(false)
+const galleryProduct = ref(null)
+const openGallery = product => { galleryProduct.value = product; isZoomed.value = true }
 const selectedSize = ref(null)
 const selectedQty = ref(1)
 const isGridMode = ref(false)
@@ -98,9 +102,9 @@ const registerForm = ref({
 const fetchProducts = async () => {
   try {
     loading.value = true
-    const res = await fetch(`${API_URL}/produtos`)
+    const res = await fetch(`${API_URL}/produtos?canal=ecommerce`)
     const data = await res.json()
-    products.value = Array.isArray(data) ? data : []
+    products.value = Array.isArray(data) ? data.filter(p => p.venda_externa === true) : []
   } catch (e) { console.error("ERRO:", e) } 
   finally { setTimeout(() => { loading.value = false }, 800) }
 }
@@ -566,12 +570,7 @@ watch([allCustomers, currentUser], () => syncUserWithCustomer(), { immediate: tr
   <div class="max-w-md mx-auto bg-slate-50 min-h-screen pb-24 font-sans text-slate-900 overflow-x-hidden relative">
     
     <!-- MODAL ZOOM IMAGEM -->
-    <div v-if="isZoomed" class="fixed inset-0 z-[100] bg-black/95 backdrop-blur-xl flex items-center justify-center p-4" @click="isZoomed = false">
-      <img :src="`${IMAGE_BASE}/${selectedProduct?.imagem}`" class="w-full max-h-[80vh] object-contain animate-in zoom-in duration-300">
-      <button class="absolute top-12 right-6 text-white bg-white/10 p-4 rounded-full backdrop-blur">
-        <X class="w-6 h-6" />
-      </button>
-    </div>
+    <ProductGallery :open="isZoomed" :images="productPhotos(galleryProduct, IMAGE_BASE)" :title="galleryProduct?.descricao" @close="isZoomed = false" />
 
     <!-- HEADER FIXO -->
     <header class="sticky top-0 z-50 bg-white/90 backdrop-blur-lg p-4 flex justify-between items-center border-b border-slate-100 shadow-sm">
@@ -623,9 +622,10 @@ watch([allCustomers, currentUser], () => syncUserWithCustomer(), { immediate: tr
         <div v-if="paginatedProducts.length > 0" class="grid grid-cols-2 gap-4">
           <div v-for="p in paginatedProducts" :key="p.referencia" @click="openDetails(p)" 
                class="bg-white rounded-[2.5rem] overflow-hidden shadow-sm border border-slate-100 relative group active:scale-95 transition-all">
-            <div class="relative overflow-hidden h-48">
-              <img :src="`${IMAGE_BASE}/${p.imagem}`" class="w-full h-full object-cover">
-            </div>
+            <button type="button" @click.stop="openGallery(p)" :aria-label="`Ver fotos de ${p.descricao}`" class="relative overflow-hidden h-48 w-full block">
+              <img :src="productPhotos(p, IMAGE_BASE)[0] || '/assets/img/placeholder.png'" :alt="p.descricao" class="w-full h-full object-cover">
+              <span v-if="productPhotos(p, IMAGE_BASE).length > 1" class="absolute bottom-3 right-3 rounded-full bg-slate-900/70 text-white px-2 py-1 text-[10px]">{{ productPhotos(p, IMAGE_BASE).length }} fotos</span>
+            </button>
             <div class="p-5">
               <span class="text-[8px] font-black text-indigo-500 uppercase block mb-1">{{ p.categoria }}</span>
               <h3 class="font-bold text-xs text-slate-800 line-clamp-2 h-8 leading-tight mb-2 uppercase">{{ p.descricao }}</h3>
@@ -640,6 +640,7 @@ watch([allCustomers, currentUser], () => syncUserWithCustomer(), { immediate: tr
           </div>
         </div>
         
+        <p v-if="!paginatedProducts.length" class="text-center text-sm text-slate-500 py-16">Nenhum produto disponível no momento.</p>
         <!-- Paginação -->
         <div v-if="totalPages > 1" class="flex justify-center items-center gap-6 mt-12 mb-8">
           <button @click="currentPage--" :disabled="currentPage === 1" class="w-12 h-12 flex items-center justify-center bg-white rounded-2xl shadow-sm disabled:opacity-20"><ChevronLeft class="w-6 h-6"/></button>
@@ -652,7 +653,7 @@ watch([allCustomers, currentUser], () => syncUserWithCustomer(), { immediate: tr
     <!-- STEP 2: DETALHES DO PRODUTO (NOVO SELETOR) -->
     <div v-if="currentStep === 'details' && selectedProduct" class="animate-in slide-in-from-bottom-24 duration-500">
       <div class="relative h-[55vh]">
-        <img :src="`${IMAGE_BASE}/${selectedProduct.imagem}`" @click="isZoomed = true" class="w-full h-full object-cover">
+        <button type="button" @click="openGallery(selectedProduct)" aria-label="Ampliar fotos do produto" class="w-full h-full"><img :src="productPhotos(selectedProduct, IMAGE_BASE)[0] || '/assets/img/placeholder.png'" :alt="selectedProduct.descricao" class="w-full h-full object-cover"></button>
         <button @click="currentStep = 'home'" class="absolute top-6 left-6 p-4 bg-white/90 backdrop-blur rounded-2xl shadow-xl">
           <ArrowLeft class="w-6 h-6" />
         </button>

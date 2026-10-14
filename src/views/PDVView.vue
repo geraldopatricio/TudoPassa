@@ -1,5 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import ProductGallery from '../components/ProductGallery.vue'
+import { productPhotos } from '../utils/productPhotos'
 import Footer from '../components/Footer.vue'
 import OrderPix from '../components/OrderPix.vue'
 import { 
@@ -11,6 +13,7 @@ import {
 // --- CONFIGURAÇÃO DA API ---
 const API_URL = import.meta.env.VITE_API_URL || '/api' // Altere para sua URL se necessário
 
+const galleryProduct = ref(null)
 const viewType = ref('grid') 
 const searchQuery = ref('') 
 const loading = ref(true)
@@ -131,7 +134,8 @@ const fetchProducts = async () => {
         name: p.descricao, // substitui name por descricao
         price: p.variantes?.[0]?.valor_unitario || 0, // busca valor da primeira variante
         code: p.referencia, // substitui code por referencia
-        image: p.imagem ? `${API_URL}/uploads/produtos/${p.imagem}` : '/assets/img/placeholder.png',
+        image: productPhotos(p, `${API_URL}/uploads/produtos`)[0] || '/assets/img/placeholder.png',
+        images: productPhotos(p, `${API_URL}/uploads/produtos`),
         variantes: p.variantes || [],
         discount: 0
       }))
@@ -326,6 +330,7 @@ onUnmounted(() => {
 </script>
 
 <template>
+  <ProductGallery :open="!!galleryProduct" :images="galleryProduct?.images || []" :title="galleryProduct?.name" @close="galleryProduct = null" />
   <div v-if="variantProduct" class="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4">
     <div class="bg-white rounded-2xl p-6 max-w-xl w-full max-h-[85vh] overflow-auto">
       <div class="flex justify-between mb-4"><h2 class="font-bold">{{ variantProduct.name }}</h2><button @click="variantProduct = null" aria-label="Fechar"><X /></button></div>
@@ -377,13 +382,13 @@ onUnmounted(() => {
           <div v-else-if="viewType === 'grid'" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 animate-in fade-in duration-300">
             <div v-for="p in filteredProducts" :key="p.id" @click="addToCart(p)"
               class="group bg-white p-4 rounded-[2rem] border border-slate-200 hover:border-indigo-200 hover:shadow-lg transition-all cursor-pointer flex flex-col">
-              <div class="aspect-square bg-slate-50 rounded-2xl mb-3 flex items-center justify-center border border-slate-100 group-hover:bg-indigo-50 overflow-hidden">
+              <button type="button" @click.stop="galleryProduct = p" :aria-label="`Ver fotos de ${p.name}`" class="aspect-square bg-slate-50 rounded-2xl mb-3 flex items-center justify-center border border-slate-100 group-hover:bg-indigo-50 overflow-hidden">
                 <img 
                   :src="p.image" 
                   :alt="p.name" 
                   class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" 
                 />
-              </div>
+              </button>
               <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">{{ p.code }}</p>
               <h3 class="font-bold text-slate-700 text-sm line-clamp-1">{{ p.name }}</h3>
               <div class="flex justify-between items-center mt-auto pt-3 border-t border-slate-50">
@@ -408,13 +413,13 @@ onUnmounted(() => {
             <div v-for="p in filteredProducts" :key="p.id" 
               class="bg-white p-3 rounded-2xl border border-slate-200 hover:border-indigo-200 transition-all grid grid-cols-12 gap-4 items-center px-6 group">
               <div class="col-span-5 flex items-center gap-4">
-                <div class="w-10 h-10 bg-slate-50 rounded-lg flex items-center justify-center border border-slate-100 group-hover:bg-indigo-50 overflow-hidden">
+                <button type="button" @click.stop="galleryProduct = p" :aria-label="`Ver fotos de ${p.name}`" class="w-10 h-10 bg-slate-50 rounded-lg flex items-center justify-center border border-slate-100 group-hover:bg-indigo-50 overflow-hidden">
                   <img 
                     :src="p.image" 
                     :alt="p.name" 
                     class="w-full h-full object-cover" 
                   />
-                </div>
+                </button>
                 <div>
                   <h4 class="text-sm font-bold text-slate-700">{{ p.name }}</h4>
                   <span class="text-[10px] font-medium text-slate-400 tracking-tighter">{{ p.code }}</span>
