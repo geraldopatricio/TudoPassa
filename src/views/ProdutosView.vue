@@ -6,7 +6,7 @@ import {
 } from 'lucide-vue-next'
 import * as XLSX from 'xlsx'
 import CatalogPagination from '../components/CatalogPagination.vue'
-import { sortProducts } from '../utils/productSort'
+import { sortProducts, productStock } from '../utils/productSort'
 
 // --- CONFIGURAÇÕES DE CONEXÃO ---
 // const API_URL = '/api/produtos'
@@ -136,7 +136,8 @@ const sortableColumns = [
   { key: 'descricao', label: 'Produto' },
   { key: 'referencia', label: 'Referência' },
   { key: 'categoria', label: 'Categoria' },
-  { key: 'preco', label: 'Preço Base' }
+  { key: 'preco', label: 'Preço Base' },
+  { key: 'estoque', label: 'TOTAL QTD' }
 ]
 const toggleSort = column => {
   sortDirection.value = sortColumn.value === column && sortDirection.value === 'asc' ? 'desc' : 'asc'
@@ -356,13 +357,13 @@ onMounted(fetchProdutos)
               </thead>
               <tbody class="divide-y divide-slate-50">
                 <tr v-if="loading">
-                  <td colspan="5" class="py-20 text-center text-slate-400 font-bold uppercase text-xs">
+                  <td colspan="6" class="py-20 text-center text-slate-400 font-bold uppercase text-xs">
                     <Loader2 class="w-8 h-8 animate-spin mx-auto mb-2 text-indigo-500" />
                     Carregando estoque...
                   </td>
                 </tr>
                 <tr v-else-if="paginatedProdutos.length === 0">
-                  <td colspan="5" class="py-20 text-center text-slate-400 font-bold uppercase text-xs italic">Nenhum produto encontrado</td>
+                  <td colspan="6" class="py-20 text-center text-slate-400 font-bold uppercase text-xs italic">Nenhum produto encontrado</td>
                 </tr>
                 <tr v-for="p in paginatedProdutos" :key="p.referencia" class="hover:bg-slate-50/50 transition-colors group">
                   <td class="px-6 py-4">
@@ -381,6 +382,7 @@ onMounted(fetchProdutos)
                   <td class="px-6 py-4 font-mono text-xs text-slate-400 font-bold">#{{ p.referencia }}</td>
                   <td class="px-6 py-4"><span class="px-3 py-1 bg-slate-100 rounded-lg text-[10px] font-black text-slate-500 uppercase">{{ p.categoria }}</span></td>
                   <td class="px-6 py-4 font-black text-indigo-600">R$ {{ p.variantes[0]?.valor_unitario.toFixed(2) || '0.00' }}</td>
+                  <td class="px-6 py-4 text-sm font-bold text-slate-700 tabular-nums">{{ productStock(p).toLocaleString('pt-BR') }}</td>
                   <td class="px-6 py-4">
                     <div class="flex justify-center gap-2">
                       <button @click="openModal(p)" class="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"><Pencil class="w-4 h-4" /></button>
