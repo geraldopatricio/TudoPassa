@@ -2,10 +2,11 @@
 import { ref, onMounted, computed, watch, onUnmounted } from 'vue'
 import { 
   Search, Plus, Pencil, Trash2, Download, Upload, X, Save, 
-  Image as ImageIcon, PlusCircle, Loader2
+  Image as ImageIcon, PlusCircle, Loader2, ArrowUp, ArrowDown, ArrowUpDown
 } from 'lucide-vue-next'
 import * as XLSX from 'xlsx'
 import CatalogPagination from '../components/CatalogPagination.vue'
+import { sortProducts } from '../utils/productSort'
 
 // --- CONFIGURAÇÕES DE CONEXÃO ---
 // const API_URL = '/api/produtos'
@@ -129,11 +130,30 @@ const filteredProdutos = computed(() => {
   )
 })
 
-// 2. Paginação do resultado filtrado
+const sortColumn = ref('')
+const sortDirection = ref('asc')
+const sortableColumns = [
+  { key: 'descricao', label: 'Produto' },
+  { key: 'referencia', label: 'Referência' },
+  { key: 'categoria', label: 'Categoria' },
+  { key: 'preco', label: 'Preço Base' }
+]
+const toggleSort = column => {
+  sortDirection.value = sortColumn.value === column && sortDirection.value === 'asc' ? 'desc' : 'asc'
+  sortColumn.value = column
+  currentPage.value = 1
+}
+const resetSort = () => {
+  sortColumn.value = ''
+  currentPage.value = 1
+}
+const sortedProdutos = computed(() => sortProducts(filteredProdutos.value, sortColumn.value, sortDirection.value))
+
+// 2. Paginação do resultado filtrado e ordenado
 const paginatedProdutos = computed(() => {
   const start = (currentPage.value - 1) * itemsPerPage.value
   const end = start + itemsPerPage.value
-  return filteredProdutos.value.slice(start, end)
+  return sortedProdutos.value.slice(start, end)
 })
 
 const totalPages = computed(() => Math.max(1, Math.ceil(filteredProdutos.value.length / itemsPerPage.value)))
@@ -314,15 +334,23 @@ onMounted(fetchProdutos)
         </div>
 
         <!-- DataGrid / Tabela -->
+        <div class="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+          <span>{{ sortColumn ? `Ordenado por ${sortableColumns.find(column => column.key === sortColumn)?.label} (${sortDirection === 'asc' ? 'crescente' : 'decrescente'})` : 'Mais recentes primeiro · sem data, referência decrescente' }}</span>
+          <button v-if="sortColumn" type="button" @click="resetSort" class="font-semibold text-indigo-600 hover:text-indigo-800">Voltar à ordem padrão</button>
+        </div>
         <div class="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden flex flex-col">
           <div class="overflow-x-auto">
             <table class="w-full text-left border-collapse">
               <thead>
                 <tr class="bg-slate-50/50 border-b border-slate-100 text-[10px] uppercase tracking-widest font-black text-slate-500">
-                  <th class="px-6 py-5">Produto</th>
-                  <th class="px-6 py-5">Referência</th>
-                  <th class="px-6 py-5">Categoria</th>
-                  <th class="px-6 py-5">Preço Base</th>
+                  <th v-for="column in sortableColumns" :key="column.key" scope="col" class="px-6 py-5"
+                    :aria-sort="sortColumn === column.key ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'">
+                    <button type="button" @click="toggleSort(column.key)" class="inline-flex items-center gap-2 whitespace-nowrap rounded text-left uppercase tracking-widest hover:text-indigo-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500"
+                      :class="sortColumn === column.key ? 'text-indigo-600' : ''">
+                      {{ column.label }}
+                      <component :is="sortColumn === column.key ? (sortDirection === 'asc' ? ArrowUp : ArrowDown) : ArrowUpDown" class="h-3.5 w-3.5" aria-hidden="true" />
+                    </button>
+                  </th>
                   <th class="px-6 py-5 text-center">Ações</th>
                 </tr>
               </thead>
