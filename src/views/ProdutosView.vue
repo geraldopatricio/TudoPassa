@@ -2,9 +2,10 @@
 import { ref, onMounted, computed, watch, onUnmounted } from 'vue'
 import { 
   Search, Plus, Pencil, Trash2, Download, Upload, X, Save, 
-  Image as ImageIcon, PlusCircle, ChevronLeft, ChevronRight, Loader2
+  Image as ImageIcon, PlusCircle, Loader2
 } from 'lucide-vue-next'
 import * as XLSX from 'xlsx'
+import CatalogPagination from '../components/CatalogPagination.vue'
 
 // --- CONFIGURAÇÕES DE CONEXÃO ---
 // const API_URL = '/api/produtos'
@@ -110,6 +111,7 @@ const fetchProdutos = async () => {
   try {
     loading.value = true
     const res = await fetch(API_URL)
+    if (!res.ok) throw new Error('Não foi possível carregar os produtos')
     produtos.value = await res.json()
   } catch (e) {
     console.error("Erro ao buscar produtos:", e)
@@ -134,7 +136,8 @@ const paginatedProdutos = computed(() => {
   return filteredProdutos.value.slice(start, end)
 })
 
-const totalPages = computed(() => Math.ceil(filteredProdutos.value.length / itemsPerPage.value))
+const totalPages = computed(() => Math.max(1, Math.ceil(filteredProdutos.value.length / itemsPerPage.value)))
+watch(totalPages, total => { currentPage.value = Math.min(currentPage.value, total) })
 
 // Resetar para página 1 ao pesquisar
 watch(searchQuery, () => { currentPage.value = 1 })
@@ -362,24 +365,7 @@ onMounted(fetchProdutos)
           </div>
 
           <!-- Paginação -->
-          <div class="p-6 bg-slate-50/50 border-t border-slate-100 flex items-center justify-between">
-            <span class="text-xs font-bold text-slate-400 uppercase tracking-widest">
-              Mostrando {{ paginatedProdutos.length }} de {{ filteredProdutos.length }} produtos
-            </span>
-            <div class="flex items-center gap-2">
-              <button @click="currentPage--" :disabled="currentPage === 1" class="p-2 rounded-xl bg-white border border-slate-200 disabled:opacity-30 hover:bg-slate-50 shadow-sm"><ChevronLeft class="w-5 h-5"/></button>
-              
-              <div class="flex gap-1">
-                <button v-for="page in totalPages" :key="page" @click="currentPage = page"
-                  :class="currentPage === page ? 'bg-indigo-600 text-white shadow-indigo-100' : 'bg-white text-slate-600 hover:bg-slate-50'"
-                  class="w-10 h-10 rounded-xl border border-slate-200 font-bold text-sm transition-all shadow-sm">
-                  {{ page }}
-                </button>
-              </div>
-
-              <button @click="currentPage++" :disabled="currentPage === totalPages" class="p-2 rounded-xl bg-white border border-slate-200 disabled:opacity-30 hover:bg-slate-50 shadow-sm"><ChevronRight class="w-5 h-5"/></button>
-            </div>
-          </div>
+          <CatalogPagination v-model="currentPage" :total="filteredProdutos.length" :page-size="itemsPerPage" />
         </div>
       </main>
     </div>

@@ -143,6 +143,8 @@ const filteredCustomers = computed(() => {
 })
 
 const totalPages = computed(() => Math.ceil(filteredBase.value.length / itemsPerPage.value) || 1)
+watch(searchQuery, () => { currentPage.value = 1 })
+watch(totalPages, total => { currentPage.value = Math.min(currentPage.value, total) })
 const paginatedProducts = computed(() => {
   const start = (currentPage.value - 1) * itemsPerPage.value
   return filteredBase.value.slice(start, start + itemsPerPage.value)
@@ -623,7 +625,7 @@ watch([allCustomers, currentUser], () => syncUserWithCustomer(), { immediate: tr
           <div v-for="p in paginatedProducts" :key="p.referencia" @click="openDetails(p)" 
                class="bg-white rounded-[2.5rem] overflow-hidden shadow-sm border border-slate-100 relative group active:scale-95 transition-all">
             <button type="button" @click.stop="openGallery(p)" :aria-label="`Ver fotos de ${p.descricao}`" class="relative overflow-hidden h-48 w-full block">
-              <img :src="productPhotos(p, IMAGE_BASE)[0] || '/assets/img/placeholder.png'" :alt="p.descricao" class="w-full h-full object-cover">
+              <img loading="lazy" decoding="async" :src="productPhotos(p, IMAGE_BASE)[0] || '/assets/img/placeholder.png'" :alt="p.descricao" class="w-full h-full object-cover">
               <span v-if="productPhotos(p, IMAGE_BASE).length > 1" class="absolute bottom-3 right-3 rounded-full bg-slate-900/70 text-white px-2 py-1 text-[10px]">{{ productPhotos(p, IMAGE_BASE).length }} fotos</span>
             </button>
             <div class="p-5">

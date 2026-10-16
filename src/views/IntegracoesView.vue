@@ -46,8 +46,11 @@ const test = async () => {
     const data = await response.json(); if (!response.ok) throw new Error(data.message)
     const total = (resource, label) => data.totals?.[resource]?.success
       ? `${data.totals[resource].total} ${label}`
-      : `${label}: falhou`
-    message.value = `Conexão realizada: ${total('clientes', 'clientes')}, ${total('produtos', 'produtos')} e ${total('profissionais', 'profissionais')}.`
+      : `${label}: falhou (${data.totals?.[resource]?.error || 'Erro não informado pelo servidor'})`
+    const results = Object.values(data.totals || {})
+    const successes = results.filter(result => result.success).length
+    const status = successes === 0 ? 'Falha na conexão' : successes === results.length ? 'Conexão realizada' : 'Conexão parcial'
+    message.value = `${status}: ${total('clientes', 'clientes')}; ${total('produtos', 'produtos')}; ${total('profissionais', 'profissionais')}.`
   } catch (error) { message.value = `Falha no teste: ${error.message}` } finally { testing.value = false }
 }
 onMounted(() => load().catch(error => message.value = error.message))

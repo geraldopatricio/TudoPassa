@@ -1,5 +1,6 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import CatalogPagination from '../components/CatalogPagination.vue'
 import ProductGallery from '../components/ProductGallery.vue'
 import { productPhotos } from '../utils/productPhotos'
 import Footer from '../components/Footer.vue'
@@ -125,6 +126,7 @@ const fetchProducts = async () => {
   try {
     loading.value = true
     const res = await fetch(`${API_URL}/produtos`)
+    if (!res.ok) throw new Error('Não foi possível carregar os produtos')
     const data = await res.json()
     
     // Mapeamos os campos da API para os campos que o template já usa
@@ -155,6 +157,14 @@ const filteredProducts = computed(() => {
     p.name.toLowerCase().includes(query) || 
     p.code.toLowerCase().includes(query)
   )
+})
+
+const productPage = ref(1)
+const productPageSize = 24
+const visibleProducts = computed(() => filteredProducts.value.slice((productPage.value - 1) * productPageSize, productPage.value * productPageSize))
+watch(searchQuery, () => { productPage.value = 1 })
+watch(() => filteredProducts.value.length, count => {
+  productPage.value = Math.min(productPage.value, Math.max(1, Math.ceil(count / productPageSize)))
 })
 
 const subtotal = computed(() => cart.value.reduce((acc, item) => acc + (item.price * item.qty), 0))
@@ -380,10 +390,10 @@ onUnmounted(() => {
 
           <!-- VISÃO GRID -->
           <div v-else-if="viewType === 'grid'" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 animate-in fade-in duration-300">
-            <div v-for="p in filteredProducts" :key="p.id" @click="addToCart(p)"
+            <div v-for="p in visibleProducts" :key="p.id" @click="addToCart(p)"
               class="group bg-white p-4 rounded-[2rem] border border-slate-200 hover:border-indigo-200 hover:shadow-lg transition-all cursor-pointer flex flex-col">
               <button type="button" @click.stop="galleryProduct = p" :aria-label="`Ver fotos de ${p.name}`" class="aspect-square bg-slate-50 rounded-2xl mb-3 flex items-center justify-center border border-slate-100 group-hover:bg-indigo-50 overflow-hidden">
-                <img 
+                <img loading="lazy" decoding="async"
                   :src="p.image" 
                   :alt="p.name" 
                   class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" 
@@ -410,11 +420,11 @@ onUnmounted(() => {
               <div class="col-span-1"></div>
             </div>
             
-            <div v-for="p in filteredProducts" :key="p.id" 
+            <div v-for="p in visibleProducts" :key="p.id"
               class="bg-white p-3 rounded-2xl border border-slate-200 hover:border-indigo-200 transition-all grid grid-cols-12 gap-4 items-center px-6 group">
               <div class="col-span-5 flex items-center gap-4">
                 <button type="button" @click.stop="galleryProduct = p" :aria-label="`Ver fotos de ${p.name}`" class="w-10 h-10 bg-slate-50 rounded-lg flex items-center justify-center border border-slate-100 group-hover:bg-indigo-50 overflow-hidden">
-                  <img 
+                  <img loading="lazy" decoding="async"
                     :src="p.image" 
                     :alt="p.name" 
                     class="w-full h-full object-cover" 
@@ -443,6 +453,7 @@ onUnmounted(() => {
               </div>
             </div>
           </div>
+          <CatalogPagination v-if="!loading" v-model="productPage" :total="filteredProducts.length" :page-size="productPageSize" />
         </section>
 
         <!-- COLUNA DIREITA: CHECKOUT (Mantida igual) -->
