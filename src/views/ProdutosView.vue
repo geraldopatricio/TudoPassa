@@ -170,6 +170,7 @@ const openModal = (produto = null) => {
   if (produto) {
     editingProduto.value = produto
     form.value = JSON.parse(JSON.stringify(produto))
+    form.value.variantes = (form.value.variantes || []).map(v => ({ ...v, disponivel: v.disponivel !== false }))
     form.value.venda_externa = produto.venda_externa === true
     photos.value = (Array.isArray(produto.imagens) ? produto.imagens : (produto.imagem && produto.imagem !== 'avatar.png' ? [produto.imagem] : [])).map(name => ({ name, url: `${IMAGE_BASE}/${name}` }))
   } else {
@@ -197,6 +198,7 @@ const makePrimary = index => { photos.value.unshift(...photos.value.splice(index
 
 const addVariante = () => {
   form.value.variantes.push({
+    disponivel: true,
     cor_codigo_nome: '',
     grade: { PP: 0, P: 0, M: 0, G: 0, GG: 0, U: 0 },
     quantidade_total: 0,
@@ -466,6 +468,11 @@ onMounted(fetchProdutos)
                     <div class="w-full p-2 bg-slate-200/50 rounded-xl text-sm font-black text-slate-500 text-center">{{ v.quantidade_total }}</div>
                   </div>
                 </div>
+
+                <label class="flex items-center gap-2 mb-4 text-sm font-bold text-slate-600">
+                  <input type="checkbox" v-model="v.disponivel" class="accent-indigo-600">
+                  Disponibilizar esta cor no PDV e no ecommerce
+                </label>
 
                 <!-- Nova Linha para as 3 Tabelas de Preço -->
                 <div class="grid grid-cols-3 gap-3 mb-4 p-3 bg-white/50 rounded-2xl border border-dashed border-slate-200">

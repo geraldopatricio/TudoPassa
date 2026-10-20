@@ -705,7 +705,7 @@ watch([allCustomers, currentUser], () => syncUserWithCustomer(), { immediate: tr
             <h4 class="font-black text-[11px] uppercase tracking-widest text-slate-400 mb-2">Selecione as quantidades</h4>
             <div v-for="(estoque, tam) in selectedVariant?.grade" :key="tam"
                  class="flex items-center justify-between p-5 bg-slate-50 rounded-[2rem] border border-slate-100"
-                 :class="estoque === 0 ? 'opacity-40 grayscale' : ''">
+                 >
                 
                 <div class="flex items-center gap-4">
                   <div class="w-12 h-12 bg-white rounded-xl flex items-center justify-center font-black text-indigo-600 shadow-sm text-lg">

@@ -18,7 +18,7 @@ import DocumentacaoView from '../views/DocumentacaoView.vue'
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
-    { path: '/dashboard', name: 'dashboard', component: () => import('../views/DashboardView.vue') },
+    { path: '/dashboard', alias: '/dashboad', name: 'dashboard', component: () => import('../views/DashboardView.vue') },
     {
       path: '/',
       name: 'login',

@@ -125,7 +125,7 @@ const cart = ref([])
 const fetchProducts = async () => {
   try {
     loading.value = true
-    const res = await fetch(`${API_URL}/produtos`)
+    const res = await fetch(`${API_URL}/produtos?canal=pdv`)
     if (!res.ok) throw new Error('Não foi possível carregar os produtos')
     const data = await res.json()
     
