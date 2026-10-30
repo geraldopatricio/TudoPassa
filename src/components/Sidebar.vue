@@ -54,7 +54,7 @@ const setMenuByRoute = () => {
   if (['/pedidos'].includes(route.path)) openMenus.value.pedidos = true
   if (route.path.startsWith('/relatorios')) openMenus.value.relatorios = true
   if (['/produtos', '/tabela-precos'].includes(route.path)) openMenus.value.estoque = true
-  if (['/financeiro'].includes(route.path)) openMenus.value.financeiro = true
+  if (['/financeiro', '/financeiro/asaas'].includes(route.path)) openMenus.value.financeiro = true
   if (['/logistica-fretes', '/logistica-monitoramento'].includes(route.path)) openMenus.value.logistica = true
   if (['/clientes', '/profissionais'].includes(route.path)) openMenus.value.pessoas = true
   if (['/usuarios'].includes(route.path)) openMenus.value.admin = true
@@ -187,7 +187,7 @@ const isGroupActive = (paths) => paths.includes(route.path)
       <div class="py-1">
         <button @click="toggleMenu('financeiro')" 
           :class="['w-full flex items-center px-3 py-3 rounded-xl transition-all group', 
-          isGroupActive(['/financeiro']) ? 'text-indigo-600 bg-indigo-50/30 font-bold' : 'text-slate-500 hover:bg-slate-50',
+          isGroupActive(['/financeiro', '/financeiro/asaas']) ? 'text-indigo-600 bg-indigo-50/30 font-bold' : 'text-slate-500 hover:bg-slate-50',
           isCollapsed ? 'justify-center' : 'justify-between']">
           <div class="flex items-center gap-3">
             <DollarSign class="w-6 h-6 shrink-0" />
@@ -199,6 +199,7 @@ const isGroupActive = (paths) => paths.includes(route.path)
           <router-link to="/financeiro" class="block px-4 py-2 text-xs text-slate-500 hover:text-indigo-600 rounded-xl uppercase font-bold" active-class="!text-indigo-600 font-black">
             Entradas
           </router-link>
+          <router-link to="/financeiro/asaas" class="block px-4 py-2 text-xs text-slate-500 hover:text-indigo-600 rounded-xl uppercase font-bold" active-class="!text-indigo-600 font-black">Asaas</router-link>
         </div>
       </div>
 

@@ -12,7 +12,7 @@ export function sortProducts(products, column, direction = 'asc') {
   const sign = direction === 'desc' ? -1 : 1
   const value = product => column === 'preco'
     ? Number(product.variantes?.[0]?.valor_unitario) || 0
-    : column === 'estoque' ? productStock(product) : String(product[column] ?? '')
+    : column === 'estoque' ? productStock(product) : column === 'colecao' ? product.colecao?.descricao_secundaria || product.colecao?.descricao || '' : String(product[column] ?? '')
   return [...products].sort((a, b) => sign * (column === 'preco' || column === 'estoque'
     ? value(a) - value(b)
     : textOrder.compare(value(a), value(b))))

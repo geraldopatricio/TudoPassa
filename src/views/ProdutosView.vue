@@ -16,6 +16,7 @@ const API_URL = `${BASE_URL}/produtos`;
 const IMAGE_BASE = `${BASE_URL}/uploads/produtos`;
 
 const produtos = ref([])
+const collectionLabel = value => value?.descricao_secundaria || value?.descricao || 'Sem coleção'
 const searchQuery = ref('')
 const loading = ref(true)
 const isSidebarOpen = ref(false)
@@ -31,6 +32,8 @@ onUnmounted(releasePhotos)
 const form = ref({
   referencia: '',
   categoria: 'CAMISA',
+  colecao: null,
+  usar_colecao_dashboard: false,
   descricao: '',
   unidade: 'UN',
   variantes: []
@@ -74,6 +77,8 @@ const importExcel = (event) => {
         const produtoDados = {
           referencia: ref,
           categoria: (row.Categoria || row.categoria || 'CAMISA').toUpperCase(),
+          ...(row.UsarColecaoDashboard !== undefined ? { usar_colecao_dashboard: [true, 'true', 'Sim', 'sim'].includes(row.UsarColecaoDashboard) } : {}),
+          ...((row.Colecao || row.colecao) ? { colecao: { codigo: row.CodigoColecao ?? null, descricao: String(row.Colecao || row.colecao), descricao_secundaria: String(row.DescricaoSecundariaColecao || '') } } : {}),
           descricao: row.Descricao || row.descricao || '',
           unidade: (row.Unidade || row.unidade || 'UN').toUpperCase(),
           variantes: [novaVariante]
@@ -126,7 +131,7 @@ const filteredProdutos = computed(() => {
   const query = searchQuery.value.toLowerCase().trim()
   return produtos.value.filter(p => 
     p.descricao.toLowerCase().includes(query) || 
-    p.referencia.includes(query)
+    p.referencia.includes(query) || collectionLabel(p.colecao).toLowerCase().includes(query)
   )
 })
 
@@ -136,6 +141,7 @@ const sortableColumns = [
   { key: 'descricao', label: 'Produto' },
   { key: 'referencia', label: 'Referência' },
   { key: 'categoria', label: 'Categoria' },
+  { key: 'colecao', label: 'Coleção' },
   { key: 'preco', label: 'Preço Base' },
   { key: 'estoque', label: 'TOTAL QTD' }
 ]
@@ -170,12 +176,14 @@ const openModal = (produto = null) => {
   if (produto) {
     editingProduto.value = produto
     form.value = JSON.parse(JSON.stringify(produto))
+    form.value.colecao ??= null
+    form.value.usar_colecao_dashboard = produto.usar_colecao_dashboard === true
     form.value.variantes = (form.value.variantes || []).map(v => ({ ...v, disponivel: v.disponivel !== false }))
     form.value.venda_externa = produto.venda_externa === true
     photos.value = (Array.isArray(produto.imagens) ? produto.imagens : (produto.imagem && produto.imagem !== 'avatar.png' ? [produto.imagem] : [])).map(name => ({ name, url: `${IMAGE_BASE}/${name}` }))
   } else {
     editingProduto.value = null
-    form.value = { referencia: '', categoria: 'CAMISA', descricao: '', unidade: 'UN', variantes: [], venda_externa: false }
+    form.value = { referencia: '', colecao: null, usar_colecao_dashboard: false, categoria: 'CAMISA', descricao: '', unidade: 'UN', variantes: [], venda_externa: false }
 
   }
   isModalOpen.value = true
@@ -231,6 +239,8 @@ const saveProduto = async () => {
   const formData = new FormData()
   formData.append('referencia', form.value.referencia)
   formData.append('categoria', form.value.categoria)
+  if (form.value.colecao) formData.append('colecao', JSON.stringify(form.value.colecao))
+  formData.append('usar_colecao_dashboard', String(form.value.usar_colecao_dashboard === true))
   formData.append('descricao', form.value.descricao)
   formData.append('unidade', form.value.unidade)
   formData.append('variantes', JSON.stringify(form.value.variantes))
@@ -279,6 +289,10 @@ const exportToExcel = () => {
       Referencia: p.referencia,
       Descricao: p.descricao,
       Categoria: p.categoria,
+      Colecao: p.colecao?.descricao || '',
+      CodigoColecao: p.colecao?.codigo ?? '',
+      DescricaoSecundariaColecao: p.colecao?.descricao_secundaria || '',
+      UsarColecaoDashboard: p.usar_colecao_dashboard === true,
       Unidade: p.unidade,
       Cor: v.cor_codigo_nome || '',
       Preco_Base: v.valor_unitario || 0,
@@ -359,13 +373,13 @@ onMounted(fetchProdutos)
               </thead>
               <tbody class="divide-y divide-slate-50">
                 <tr v-if="loading">
-                  <td colspan="6" class="py-20 text-center text-slate-400 font-bold uppercase text-xs">
+                  <td colspan="7" class="py-20 text-center text-slate-400 font-bold uppercase text-xs">
                     <Loader2 class="w-8 h-8 animate-spin mx-auto mb-2 text-indigo-500" />
                     Carregando estoque...
                   </td>
                 </tr>
                 <tr v-else-if="paginatedProdutos.length === 0">
-                  <td colspan="6" class="py-20 text-center text-slate-400 font-bold uppercase text-xs italic">Nenhum produto encontrado</td>
+                  <td colspan="7" class="py-20 text-center text-slate-400 font-bold uppercase text-xs italic">Nenhum produto encontrado</td>
                 </tr>
                 <tr v-for="p in paginatedProdutos" :key="p.referencia" class="hover:bg-slate-50/50 transition-colors group">
                   <td class="px-6 py-4">
@@ -383,6 +397,7 @@ onMounted(fetchProdutos)
                   </td>
                   <td class="px-6 py-4 font-mono text-xs text-slate-400 font-bold">#{{ p.referencia }}</td>
                   <td class="px-6 py-4"><span class="px-3 py-1 bg-slate-100 rounded-lg text-[10px] font-black text-slate-500 uppercase">{{ p.categoria }}</span></td>
+                  <td class="px-6 py-4 text-sm text-slate-600">{{ collectionLabel(p.colecao) }}</td>
                   <td class="px-6 py-4 font-black text-indigo-600">R$ {{ p.variantes[0]?.valor_unitario.toFixed(2) || '0.00' }}</td>
                   <td class="px-6 py-4 text-sm font-bold text-slate-700 tabular-nums">{{ productStock(p).toLocaleString('pt-BR') }}</td>
                   <td class="px-6 py-4">
@@ -440,6 +455,16 @@ onMounted(fetchProdutos)
                 <select v-model="form.categoria" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none">
                   <option>CAMISA</option><option>SHORT</option><option>ACESSORIOS</option>
                 </select>
+              </div>
+              <div class="col-span-2 space-y-1">
+                <label v-if="form.colecao" class="block text-xs text-slate-500 pt-2">Segunda descrição da coleção (nome de exibição)
+                  <input v-model="form.colecao.descricao_secundaria" class="w-full p-3 mt-1 bg-slate-50 border border-slate-200 rounded-2xl outline-none" placeholder="Ex.: Verão 2027" />
+                  <span class="block mt-1">Descrição original: {{ form.colecao.descricao }}</span>
+                </label>
+                <label class="flex items-center gap-2 pt-3 text-sm text-slate-700">
+                  <input type="checkbox" v-model="form.usar_colecao_dashboard" class="w-4 h-4 accent-indigo-600" />
+                  Referencia para coleção
+                </label>
               </div>
             </div>
           </div>
